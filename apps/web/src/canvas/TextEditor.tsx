@@ -71,6 +71,7 @@ export function TextEditor() {
     const ui = useUI.getState();
     if (ui.editingId !== o.id) return;
     ui.setEditing(null);
+    board.undo.stopCapturing(); // the next action shouldn't merge into this edit's undo step
     const cur = board.store.get(o.id);
     if (cur?.type === 'text' && !cur.text.trim()) deleteObjects(board, [o.id]);
   };

@@ -9,7 +9,15 @@ import {
 } from './connectors';
 import { snapRect, snapToGrid } from './snap';
 import { fitFontSize, wrapText, type MeasureText } from './textFit';
-import { fitRect, nextZoomStep, screenToWorld, visibleWorldRect, worldToScreen, zoomAt } from './viewport';
+import {
+  fitRect,
+  followCamera,
+  nextZoomStep,
+  screenToWorld,
+  visibleWorldRect,
+  worldToScreen,
+  zoomAt,
+} from './viewport';
 
 const close = (a: number, b: number, eps = 1e-6) => expect(Math.abs(a - b)).toBeLessThan(eps);
 
@@ -77,6 +85,16 @@ describe('viewport', () => {
     close(c.y, 300);
     const vis = visibleWorldRect(cam, 800, 600);
     close(vis.x, 1000);
+    close(vis.w, 400);
+  });
+
+  it('follows a peer by showing the same world area on a different-sized screen', () => {
+    const peer = { x: -200, y: -100, zoom: 2, w: 800, h: 600 }; // sees world (100,50)-(500,350)
+    const cam = followCamera(peer, 400, 300);
+    const vis = visibleWorldRect(cam, 400, 300);
+    close(cam.zoom, 1);
+    close(vis.x, 100);
+    close(vis.y, 50);
     close(vis.w, 400);
   });
 

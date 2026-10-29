@@ -54,7 +54,7 @@ export const nextZ = (store: DocStore): string => keyAbove(store.getSorted().at(
 export function addObjects(board: Board, objs: BoardObject[]) {
   board.transact(() => {
     for (const o of objs) insertObject(board.objects, o);
-  });
+  }, true);
 }
 
 export function patch(board: Board, id: string, p: ObjectPatch) {
@@ -80,34 +80,34 @@ export function deleteObjects(board: Board, ids: Iterable<string>): void {
       }
     }
     for (const id of doomed) board.objects.delete(id);
-  });
+  }, true);
 }
 
 export function bringToFront(board: Board, ids: string[]) {
   const keys = bringToFrontKeys(board.store.getSorted(), new Set(ids));
-  board.transact(() => keys.forEach((z, id) => patchObject(board.objects, id, { z })));
+  board.transact(() => keys.forEach((z, id) => patchObject(board.objects, id, { z })), true);
 }
 
 export function sendToBack(board: Board, ids: string[]) {
   const keys = sendToBackKeys(board.store.getSorted(), new Set(ids));
-  board.transact(() => keys.forEach((z, id) => patchObject(board.objects, id, { z })));
+  board.transact(() => keys.forEach((z, id) => patchObject(board.objects, id, { z })), true);
 }
 
 export function group(board: Board, ids: string[]) {
   if (ids.length < 2) return;
   const groupId = newId();
-  board.transact(() => ids.forEach((id) => patchObject(board.objects, id, { groupId })));
+  board.transact(() => ids.forEach((id) => patchObject(board.objects, id, { groupId })), true);
 }
 
 export function ungroup(board: Board, ids: string[]) {
-  board.transact(() => ids.forEach((id) => patchObject(board.objects, id, { groupId: null })));
+  board.transact(() => ids.forEach((id) => patchObject(board.objects, id, { groupId: null })), true);
 }
 
 /** Lock all if any is unlocked, otherwise unlock all. */
 export function toggleLock(board: Board, ids: string[]) {
   const objs = ids.map((id) => board.store.get(id)).filter((o) => o !== undefined);
   const locked = !objs.every((o) => o.locked);
-  board.transact(() => objs.forEach((o) => patchObject(board.objects, o.id, { locked })));
+  board.transact(() => objs.forEach((o) => patchObject(board.objects, o.id, { locked })), true);
 }
 
 /** Apply a per-object patch (return null to skip an object). */
@@ -118,7 +118,7 @@ export function updateEach(board: Board, ids: string[], fn: (o: BoardObject) => 
       const p = o && fn(o);
       if (p) patchObject(board.objects, id, p);
     }
-  });
+  }, true);
 }
 
 /** Shift objects from their original snapshot by (dx, dy). Point ends of connectors move too. */

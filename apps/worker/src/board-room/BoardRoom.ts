@@ -1,4 +1,14 @@
-import { CLOSE_BOARD_DELETED, MSG_AWARENESS, MSG_ROLE, MSG_SYNC, Role, can, newId } from '@canvasly/shared';
+import {
+  CLOSE_BOARD_DELETED,
+  HEARTBEAT_PING,
+  HEARTBEAT_PONG,
+  MSG_AWARENESS,
+  MSG_ROLE,
+  MSG_SYNC,
+  Role,
+  can,
+  newId,
+} from '@canvasly/shared';
 import { DurableObject } from 'cloudflare:workers';
 import * as decoding from 'lib0/decoding';
 import * as encoding from 'lib0/encoding';
@@ -50,7 +60,7 @@ function send(ws: WebSocket, data: Uint8Array) {
  * dropping connections, and the constructor reloads the doc from SQLite when the next message arrives.
  */
 export class BoardRoom extends DurableObject<Env> {
-  private readonly doc = new Y.Doc();
+  private _doc: Y.Doc | null = null;
   private readonly storage: DocStorage;
   private pending: Uint8Array[] = [];
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -62,8 +72,23 @@ export class BoardRoom extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.storage = new DocStorage(ctx.storage);
-    this.storage.load(this.doc);
-    this.doc.on('update', this.onDocUpdate);
+    // Heartbeats are answered by the runtime without waking (or billing duration for) a hibernated room.
+    ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(HEARTBEAT_PING, HEARTBEAT_PONG));
+  }
+
+  /**
+   * Loaded on first use, not in the constructor: after hibernation, most wake-ups are presence renewals
+   * (every ~15 s per client) that only need relaying. Loading eagerly would re-read the whole document
+   * from SQLite each time and burn the rows-read quota for nothing.
+   */
+  private get doc(): Y.Doc {
+    if (!this._doc) {
+      const doc = new Y.Doc();
+      this.storage.load(doc);
+      doc.on('update', this.onDocUpdate);
+      this._doc = doc;
+    }
+    return this._doc;
   }
 
   // --- connections ---

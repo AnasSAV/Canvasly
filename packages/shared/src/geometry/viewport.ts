@@ -51,3 +51,15 @@ export function nextZoomStep(zoom: number, dir: 1 | -1): number {
   if (dir > 0) return ZOOM_STEPS.find((s) => s > zoom + 1e-6) ?? MAX_ZOOM;
   return [...ZOOM_STEPS].reverse().find((s) => s < zoom - 1e-6) ?? MIN_ZOOM;
 }
+
+/**
+ * Camera for following someone: show exactly the world area they see, scaled to fit our viewport
+ * (sizes differ between screens, so we fit their visible rect rather than copying their camera).
+ */
+export function followCamera(
+  peer: { x: number; y: number; zoom: number; w: number; h: number },
+  width: number,
+  height: number,
+): Camera {
+  return fitRect(visibleWorldRect(peer, peer.w, peer.h), width, height, 0, MAX_ZOOM);
+}

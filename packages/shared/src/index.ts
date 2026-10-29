@@ -2,6 +2,7 @@ export * from './schemas/objects';
 export * from './schemas/api';
 export * from './permissions';
 export * from './protocol';
+export * from './presence';
 export * from './geometry/vec';
 export * from './geometry/box';
 export * from './geometry/connectors';

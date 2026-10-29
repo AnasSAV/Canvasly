@@ -44,6 +44,7 @@ export function createActions(board: Board, getPointerWorld: () => Vec | null) {
     deselect: () => {
       ui().select([]);
       ui().setTool('select');
+      ui().setFollowing(null);
     },
     group: () => group(board, sel()),
     ungroup: () => ungroup(board, sel()),

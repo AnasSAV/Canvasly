@@ -1,4 +1,4 @@
-import { can, screenToWorld, type BoardSummary } from '@canvasly/shared';
+import { BoardSummary, can, screenToWorld } from '@canvasly/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BoardCanvas } from './canvas/BoardCanvas';
 import type { Interactions } from './canvas/interactions';
@@ -7,23 +7,29 @@ import { exposeForDebugging } from './debug';
 import { createActions } from './doc/actions';
 import { Board } from './doc/board';
 import { BoardContext } from './doc/context';
+import type { PresenceUser } from './doc/presence';
 import { contentBounds } from './doc/ops';
+import { useFollow, usePresencePublisher } from './hooks/usePresence';
 import { useShortcuts } from './hooks/useShortcuts';
 import { useThumbnailUploader } from './hooks/useThumbnailUploader';
 import { ApiError, api, boardSocketUrl } from './lib/api';
+import { authClient } from './lib/auth';
 import { Link } from './lib/router';
 import { useUI } from './state/ui';
 import { useViewport } from './state/viewport';
+import { FollowBanner, RemoteCursors } from './ui/Presence';
 import { SelectionToolbar } from './ui/SelectionToolbar';
 import { Toolbar } from './ui/Toolbar';
 import { TopBar } from './ui/TopBar';
 import { ZoomControls } from './ui/ZoomControls';
 
-function useBoardInstance(boardId: string | null): Board | null {
+function useBoardInstance(boardId: string | null, user: PresenceUser | null): Board | null {
   const [board, setBoard] = useState<Board | null>(null);
+  const userId = user?.id;
+  const userName = user?.name;
   useEffect(() => {
-    if (!boardId) return;
-    const b = new Board(boardId, boardSocketUrl(boardId));
+    if (!boardId || !userId) return;
+    const b = new Board(boardId, boardSocketUrl(boardId), { id: userId, name: userName ?? '' });
     let alive = true;
     void b.ready.then(() => alive && setBoard(b));
     return () => {
@@ -31,8 +37,27 @@ function useBoardInstance(boardId: string | null): Board | null {
       setBoard(null);
       b.destroy();
     };
-  }, [boardId]);
+  }, [boardId, userId, userName]);
   return board;
+}
+
+// Board metadata is cached so a board that was open before can still be opened while offline
+// (its content comes from IndexedDB; edits sync on reconnect).
+const metaKey = (id: string) => `canvasly:board:${id}`;
+function cacheMeta(meta: BoardSummary) {
+  try {
+    localStorage.setItem(metaKey(meta.id), JSON.stringify(meta));
+  } catch {
+    // storage unavailable: offline open just won't work
+  }
+}
+function cachedMeta(id: string): BoardSummary | null {
+  try {
+    const parsed = BoardSummary.safeParse(JSON.parse(localStorage.getItem(metaKey(id)) ?? 'null'));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
 }
 
 function Centered({ children }: { children: React.ReactNode }) {
@@ -46,19 +71,26 @@ function Centered({ children }: { children: React.ReactNode }) {
 export function BoardPage({ boardId }: { boardId: string }) {
   const [meta, setMeta] = useState<BoardSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { data: session } = authClient.useSession();
   useEffect(() => {
     api
       .getBoard(boardId)
-      .then(setMeta)
-      .catch((e: Error) =>
-        setError(
-          e instanceof ApiError && e.status === 404
-            ? "This board doesn't exist or you don't have access to it."
-            : e.message,
-        ),
-      );
+      .then((m) => {
+        cacheMeta(m);
+        setMeta(m);
+      })
+      .catch((e: Error) => {
+        if (e instanceof ApiError) {
+          localStorage.removeItem(metaKey(boardId));
+          setError(e.status === 404 ? "This board doesn't exist or you don't have access to it." : e.message);
+          return;
+        }
+        const cached = cachedMeta(boardId); // network error: open from the local cache
+        if (cached) setMeta(cached);
+        else setError("You're offline and this board isn't available on this device yet.");
+      });
   }, [boardId]);
-  const board = useBoardInstance(meta ? boardId : null);
+  const board = useBoardInstance(meta ? boardId : null, session?.user ?? null);
 
   if (error) {
     return (
@@ -73,7 +105,14 @@ export function BoardPage({ boardId }: { boardId: string }) {
   if (!board || !meta) return <Centered>Loading board…</Centered>;
   return (
     <BoardContext value={board}>
-      <BoardView board={board} meta={meta} onMetaChange={setMeta} />
+      <BoardView
+        board={board}
+        meta={meta}
+        onMetaChange={(m) => {
+          cacheMeta(m);
+          setMeta(m);
+        }}
+      />
     </BoardContext>
   );
 }
@@ -99,10 +138,18 @@ function BoardView({
   const openImagePicker = useCallback(() => fileRef.current?.click(), []);
   useShortcuts(actions, openImagePicker);
   const flushThumbnail = useThumbnailUploader(board, can(meta.role, 'edit'));
+  usePresencePublisher(board);
+  useFollow(board);
 
   // UI state is global; start each board with a clean slate.
   useEffect(() => {
-    useUI.setState({ selectedIds: [], editingId: null, tool: 'select', draft: null });
+    useUI.setState({
+      selectedIds: [],
+      editingId: null,
+      tool: 'select',
+      draft: null,
+      followingClientId: null,
+    });
   }, [board]);
 
   useEffect(() => {
@@ -150,6 +197,8 @@ function BoardView({
       }}
     >
       <BoardCanvas onInteractions={onInteractions} />
+      <RemoteCursors />
+      <FollowBanner />
       <TopBar
         board={board}
         actions={actions}

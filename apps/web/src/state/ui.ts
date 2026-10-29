@@ -35,6 +35,8 @@ interface UIState {
   guides: Guide[];
   marquee: Rect | null;
   draft: Draft | null;
+  /** Awareness client id whose viewport we mirror ("follow user"), or null. */
+  followingClientId: number | null;
   stickyColor: string;
   penColor: string;
   penSize: number;
@@ -50,6 +52,7 @@ interface UIState {
   setGuides: (g: Guide[]) => void;
   setMarquee: (r: Rect | null) => void;
   setDraft: (d: Draft | null) => void;
+  setFollowing: (clientId: number | null) => void;
   setStickyColor: (c: string) => void;
   setPenColor: (c: string) => void;
   setPenSize: (s: number) => void;
@@ -69,6 +72,7 @@ export const useUI = create<UIState>()((set, get) => ({
   guides: [],
   marquee: null,
   draft: null,
+  followingClientId: null,
   stickyColor: STICKY_COLORS[0],
   penColor: '#1a1a1a',
   penSize: 4,
@@ -90,6 +94,7 @@ export const useUI = create<UIState>()((set, get) => ({
   },
   setMarquee: (marquee) => set({ marquee }),
   setDraft: (draft) => set({ draft }),
+  setFollowing: (followingClientId) => set({ followingClientId }),
   setStickyColor: (stickyColor) => set({ stickyColor }),
   setPenColor: (penColor) => set({ penColor }),
   setPenSize: (penSize) => set({ penSize }),

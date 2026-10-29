@@ -3,9 +3,10 @@
 A Miro-style collaborative whiteboard that runs entirely on Cloudflare's **Workers Free** plan — no
 credit card, no servers that sleep, $0 hosting.
 
-> **Status:** Phase 2 of 4 — infinite canvas, accounts (email/password + optional Google), dashboard
-> with thumbnails, and boards persisted in a per-board Durable Object. Live multi-user presence and
-> cursors arrive in Phase 3; sharing, comments, frames and export in Phase 4.
+> **Status:** Phase 3 of 4 — infinite canvas, accounts (email/password + optional Google), dashboard
+> with thumbnails, boards persisted in a per-board Durable Object, and real-time collaboration (live
+> cursors, presence, follow mode, per-user undo, offline edits). Sharing, comments, frames and export
+> arrive in Phase 4.
 
 ## Architecture
 
@@ -42,10 +43,29 @@ credit card, no servers that sleep, $0 hosting.
 | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Hand-rolled y-protocols sync     | Server-side role checks need per-message control; the client batches doc + presence updates into ≤ 1 frame / 50 ms because incoming WS messages count against the DO request quota; and we control hibernation + compaction. |
 | No server-side `Awareness`       | y-protocols' `Awareness` runs a `setInterval`, which would keep the DO from hibernating. The DO parses/relays the wire format instead.                                                                                       |
+| Lazy document load               | After hibernation, most wake-ups are presence renewals that only need relaying, so the DO loads the Y.Doc from SQLite only when a sync message or RPC needs it.                                                              |
 | Debounced persistence            | Updates are merged and written to SQLite at most every 2 s (≤ 10 s after the first change, immediately when the last client leaves). The log is compacted into a chunked snapshot after 200 rows / 1 MB.                     |
 | Better Auth + PBKDF2 (WebCrypto) | Better Auth's default scrypt is pure JS and exceeds the Free plan's 10 ms CPU limit; native PBKDF2-SHA256 (100k iterations, the Workers max) doesn't. The iteration count is stored in each hash so it can be raised later.  |
 | react-konva                      | Hit-testing primitives, Transformer handles and export for free; perf via R-tree culling, a non-listening content layer and rAF-batched drags (60 fps panning with 1,000+ objects).                                          |
 | Hand-rolled 3-route router       | `/`, `/b/:id` and the signed-out page don't justify a router dependency.                                                                                                                                                     |
+
+### Real-time collaboration
+
+- **Sync:** both sides exchange Yjs state vectors on every (re)connect, then stream merged updates.
+  Conflicts are impossible by construction (CRDT); text is `Y.Text`, so concurrent typing merges.
+- **Presence** (Yjs awareness): each client publishes `{ user, cursor, selection, viewport }`, validated
+  with Zod on receipt. Cursors are drawn in screen space with name tags; other people's selections get a
+  dashed outline in their color; avatars in the header dedupe multiple tabs of the same person.
+- **Follow mode:** click an avatar to mirror that person's view (their visible world rect is fitted to your
+  screen). Panning/zooming yourself, Esc or "Stop" ends it.
+- **Undo is per user:** `Y.UndoManager` only tracks this client's transactions, so undo never reverts
+  someone else's edit. Discrete actions (create, delete, restyle, reorder, group, lock) are always their
+  own undo step; drags/resizes/strokes are one step each.
+- **Offline & reconnect:** edits are persisted to IndexedDB (`y-indexeddb`) and synced on reconnect
+  (exponential backoff with jitter, immediate retry on the browser's `online` event). A 25 s app-level
+  heartbeat — answered by the DO's `setWebSocketAutoResponse` without waking it — detects dead connections.
+  A board opened before can be reopened offline (metadata cached locally). The app shell itself isn't
+  cached for offline loads (no service worker).
 
 ### Data model
 
@@ -141,19 +161,19 @@ Runtime secrets (`BETTER_AUTH_*`, `GOOGLE_*`) stay in Cloudflare (step 5 above),
 All daily limits reset at 00:00 UTC. On the Free plan nothing is ever billed — exceeding a limit makes
 the affected operations fail until the reset.
 
-| Resource               | Free limit                                     | How Canvasly uses it                                                                                    | If exceeded                                                                            |
-| ---------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Worker requests        | 100,000 / day                                  | Only `/api/*` runs the Worker (API calls, WS upgrades, image fetches). The SPA's static files are free. | `/api/*` returns 429 / error 1027 → can't sign in or open boards. The SPA still loads. |
-| Worker CPU             | 10 ms / request                                | PBKDF2 (native) for passwords; no heavy work in the Worker                                              | That request fails                                                                     |
-| Static asset requests  | Unlimited                                      | HTML/JS/CSS                                                                                             | —                                                                                      |
-| DO requests            | 100,000 / day; incoming WS messages count 1/20 | ≤ 20 batched frames/s per _active_ editor ≈ 3,600 requests/hour → ~25+ active user-hours/day            | Board connections/messages fail; edits stay in the browser (IndexedDB) and sync later  |
-| DO duration            | 13,000 GB-s / day                              | Hibernation: idle rooms are evicted while sockets stay open; no server timers                           | Durable Object calls fail                                                              |
-| DO SQLite rows written | 100,000 / day                                  | ~1 row per 2 s of continuous editing per board (+ compaction); one row per image                        | Saves fail; clients keep edits locally and resend on reconnect                         |
-| DO SQLite rows read    | 5,000,000 / day                                | Loading a board reads its snapshot chunks + log (compacted at 200 rows)                                 | Boards can't load                                                                      |
-| DO storage             | 5 GB total (≈ 1 GB per object); 2 MB per row   | Yjs snapshots chunked < 1 MB; images ≤ 1 MB                                                             | Writes fail                                                                            |
-| D1 rows read           | 5,000,000 / day                                | Session (cookie-cached 5 min), board list, access checks                                                | All D1 queries fail → sign-in and dashboard break                                      |
-| D1 rows written        | 100,000 / day                                  | Sign-ups/sessions, board create/rename, thumbnail upserts (≤ 1 per 30 s while editing)                  | Writes fail                                                                            |
-| D1 storage             | 500 MB per DB, 5 GB total; 2 MB per row        | Metadata + ~10–40 KB thumbnails                                                                         | Inserts fail until data is deleted                                                     |
+| Resource               | Free limit                                     | How Canvasly uses it                                                                                                                                                        | If exceeded                                                                            |
+| ---------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Worker requests        | 100,000 / day                                  | Only `/api/*` runs the Worker (API calls, WS upgrades, image fetches). The SPA's static files are free.                                                                     | `/api/*` returns 429 / error 1027 → can't sign in or open boards. The SPA still loads. |
+| Worker CPU             | 10 ms / request                                | PBKDF2 (native) for passwords; no heavy work in the Worker                                                                                                                  | That request fails                                                                     |
+| Static asset requests  | Unlimited                                      | HTML/JS/CSS                                                                                                                                                                 | —                                                                                      |
+| DO requests            | 100,000 / day; incoming WS messages count 1/20 | ≤ 20 batched frames/s (doc + cursor in one frame) per _active_ user ≈ 3,600 req/hour → ~25+ active user-hours/day; idle clients ≈ 7 req/hour (presence renewal + heartbeat) | Board connections/messages fail; edits stay in the browser (IndexedDB) and sync later  |
+| DO duration            | 13,000 GB-s / day                              | Hibernation: idle rooms are evicted while sockets stay open; no server timers                                                                                               | Durable Object calls fail                                                              |
+| DO SQLite rows written | 100,000 / day                                  | ~1 row per 2 s of continuous editing per board (+ compaction); one row per image                                                                                            | Saves fail; clients keep edits locally and resend on reconnect                         |
+| DO SQLite rows read    | 5,000,000 / day                                | Loading a board reads its snapshot chunks + log (compacted at 200 rows); presence-only wake-ups read nothing                                                                | Boards can't load                                                                      |
+| DO storage             | 5 GB total (≈ 1 GB per object); 2 MB per row   | Yjs snapshots chunked < 1 MB; images ≤ 1 MB                                                                                                                                 | Writes fail                                                                            |
+| D1 rows read           | 5,000,000 / day                                | Session (cookie-cached 5 min), board list, access checks                                                                                                                    | All D1 queries fail → sign-in and dashboard break                                      |
+| D1 rows written        | 100,000 / day                                  | Sign-ups/sessions, board create/rename, thumbnail upserts (≤ 1 per 30 s while editing)                                                                                      | Writes fail                                                                            |
+| D1 storage             | 500 MB per DB, 5 GB total; 2 MB per row        | Metadata + ~10–40 KB thumbnails                                                                                                                                             | Inserts fail until data is deleted                                                     |
 
 ## Repository layout
 

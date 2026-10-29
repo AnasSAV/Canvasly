@@ -8,6 +8,7 @@ import { api } from '../lib/api';
 import { navigate } from '../lib/router';
 import { useUI } from '../state/ui';
 import { IconButton, panel } from './IconButton';
+import { PresenceAvatars } from './Presence';
 import { addStressObjects } from './stress';
 
 function useUndoState(board: Board) {
@@ -34,11 +35,15 @@ function useConnectionStatus(board: Board): ConnectionStatus | null {
   return useSyncExternalStore(provider?.subscribe ?? noop, () => provider?.status ?? null);
 }
 
-const STATUS: Record<ConnectionStatus, { color: string; label: string }> = {
-  online: { color: 'bg-emerald-500', label: 'Saved · connected' },
-  connecting: { color: 'bg-amber-400', label: 'Connecting…' },
-  offline: { color: 'bg-gray-400', label: 'Offline · changes are kept locally and sync on reconnect' },
-  denied: { color: 'bg-red-500', label: 'Access to this board was removed' },
+const STATUS: Record<ConnectionStatus, { color: string; label: string; short: string }> = {
+  online: { color: 'bg-emerald-500', label: 'Saved · connected', short: 'Saved' },
+  connecting: { color: 'bg-amber-400', label: 'Connecting…', short: 'Connecting…' },
+  offline: {
+    color: 'bg-gray-400',
+    label: 'Offline · changes are kept on this device and sync when you reconnect',
+    short: 'Offline · saved locally',
+  },
+  denied: { color: 'bg-red-500', label: 'Access to this board was removed', short: 'No access' },
 };
 
 function BoardTitle({ meta, onMetaChange }: { meta: BoardSummary; onMetaChange: (m: BoardSummary) => void }) {
@@ -129,28 +134,39 @@ export function TopBar({
           <span
             title={s.label}
             aria-label={s.label}
-            className={`ml-1 h-2 w-2 rounded-full ${s.color}`}
+            className={`ml-1 h-2 w-2 shrink-0 rounded-full ${s.color}`}
             data-testid="connection-status"
             data-status={status}
           />
         )}
-      </div>
-      <div className={`${panel} absolute top-3 right-3 z-10 flex items-center gap-0.5 p-1`}>
-        <IconButton label="Undo (Ctrl Z)" disabled={!canUndo} onClick={actions.undo} data-testid="undo">
-          <Undo2 size={18} />
-        </IconButton>
-        <IconButton label="Redo (Ctrl Shift Z)" disabled={!canRedo} onClick={actions.redo} data-testid="redo">
-          <Redo2 size={18} />
-        </IconButton>
-        <div className="mx-1 h-6 w-px bg-gray-200" />
-        <IconButton label="Snap to grid" active={snap} onClick={toggleSnap}>
-          <Grid3x3 size={18} />
-        </IconButton>
-        {import.meta.env.DEV && (
-          <IconButton label="Dev: add 1,000 objects" onClick={() => addStressObjects(board, 1000)}>
-            <Sparkles size={18} />
-          </IconButton>
+        {s && (status === 'offline' || status === 'denied') && (
+          <span className="text-xs whitespace-nowrap text-gray-500">{s.short}</span>
         )}
+      </div>
+      <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
+        <PresenceAvatars />
+        <div className={`${panel} flex items-center gap-0.5 p-1`}>
+          <IconButton label="Undo (Ctrl Z)" disabled={!canUndo} onClick={actions.undo} data-testid="undo">
+            <Undo2 size={18} />
+          </IconButton>
+          <IconButton
+            label="Redo (Ctrl Shift Z)"
+            disabled={!canRedo}
+            onClick={actions.redo}
+            data-testid="redo"
+          >
+            <Redo2 size={18} />
+          </IconButton>
+          <div className="mx-1 h-6 w-px bg-gray-200" />
+          <IconButton label="Snap to grid" active={snap} onClick={toggleSnap}>
+            <Grid3x3 size={18} />
+          </IconButton>
+          {import.meta.env.DEV && (
+            <IconButton label="Dev: add 1,000 objects" onClick={() => addStressObjects(board, 1000)}>
+              <Sparkles size={18} />
+            </IconButton>
+          )}
+        </div>
       </div>
     </>
   );

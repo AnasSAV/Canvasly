@@ -269,6 +269,7 @@ export class Interactions {
     const screen = this.screen(e);
     const p = this.world(e);
     this.lastWorld = p;
+    this.board.presence.setCursor(p);
     const u = ui();
     const g = this.g;
     const zoom = vp().camera.zoom;
@@ -461,7 +462,9 @@ export class Interactions {
   };
 
   private onPointerLeave = () => {
-    if (!this.g && ui().draft?.kind === 'eraser') ui().setDraft(null);
+    if (this.g) return;
+    this.board.presence.setCursor(null);
+    if (ui().draft?.kind === 'eraser') ui().setDraft(null);
   };
 
   private erase(p: Vec) {

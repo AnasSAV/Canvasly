@@ -11,6 +11,7 @@ import type Konva from 'konva';
 import { useEffect, useMemo, useRef } from 'react';
 import { Circle, Ellipse, Layer, Line, Path, Rect, Transformer } from 'react-konva';
 import { useBoard, useDocVersion } from '../doc/context';
+import { usePeers } from '../hooks/usePresence';
 import { useUI } from '../state/ui';
 import { useViewport } from '../state/viewport';
 import { freehandPath } from './freehand';
@@ -269,12 +270,57 @@ function Draft({ zoom }: { zoom: number }) {
   }
 }
 
+/** Outline what other people have selected, in their color. */
+function RemoteSelections({ zoom }: { zoom: number }) {
+  const board = useBoard();
+  useDocVersion(board);
+  const peers = usePeers(board);
+  return (
+    <>
+      {peers.flatMap((p) =>
+        p.selection.map((id) => {
+          const o = board.store.get(id);
+          if (!o) return null;
+          const key = `${p.clientId}-${id}`;
+          if (o.type === 'connector') {
+            const r = board.store.resolve(o);
+            if (!r) return null;
+            const width = o.strokeWidth + 4 / zoom;
+            return (
+              <Line
+                key={key}
+                points={r.points}
+                stroke={p.user.color}
+                strokeWidth={width}
+                opacity={0.5}
+                listening={false}
+              />
+            );
+          }
+          return (
+            <Line
+              key={key}
+              points={corners(o).flatMap((c) => [c.x, c.y])}
+              closed
+              stroke={p.user.color}
+              strokeWidth={2 / zoom}
+              dash={[6 / zoom, 3 / zoom]}
+              listening={false}
+            />
+          );
+        }),
+      )}
+    </>
+  );
+}
+
 export function OverlayLayer({ stage }: { stage: Konva.Stage | null }) {
   const zoom = useViewport((s) => s.camera.zoom);
   const marquee = useUI((s) => s.marquee);
   const guides = useUI((s) => s.guides);
   return (
     <Layer>
+      <RemoteSelections zoom={zoom} />
       <ConnectorSelection zoom={zoom} />
       <SelectionTransformer stage={stage} />
       <AttachHighlight zoom={zoom} />
