@@ -2,7 +2,7 @@ import { createElement, useSyncExternalStore, type AnchorHTMLAttributes, type Mo
 
 /**
  * Three routes don't justify a router dependency: this is pathname state over the History API.
- * Routes: `/` dashboard, `/b/:id` board.
+ * Routes: `/` dashboard, `/b/:id` board, `/s/:token` share link.
  */
 const listeners = new Set<() => void>();
 const notify = () => listeners.forEach((l) => l());
@@ -21,6 +21,10 @@ export function navigate(to: string, { replace = false } = {}) {
 
 export function usePathname(): string {
   return useSyncExternalStore(subscribe, () => location.pathname);
+}
+
+export function matchShareLink(pathname: string): string | null {
+  return /^\/s\/([\w-]+)\/?$/.exec(pathname)?.[1] ?? null;
 }
 
 export function matchBoard(pathname: string): string | null {

@@ -2,18 +2,23 @@ import {
   dist,
   hasText,
   makeConnector,
+  makeFrame,
   makePen,
   makeShape,
   makeSticky,
   makeText,
   nearestSideAnchor,
+  rectContainsRect,
   rectFromPoints,
   screenToWorld,
+  zoomAt,
+  DEFAULT_FRAME_SIZE,
   snapRect,
   snapToGrid,
   DEFAULT_SHAPE_SIZE,
   STICKY_SIZE,
   type BoardObject,
+  type Camera,
   type ConnectorEnd,
   type Rect,
   type ShapeKind,
@@ -45,11 +50,14 @@ type Gesture =
       wasSelected: boolean;
     }
   | { kind: 'marquee'; start: Vec; startScreen: Vec; base: string[] }
-  | { kind: 'shape'; shape: ShapeKind; start: Vec }
+  | { kind: 'shape'; shape: ShapeKind | 'frame'; start: Vec }
   | { kind: 'pen'; points: number[] }
   | { kind: 'connector'; start: ConnectorEnd; startScreen: Vec; arrow: boolean }
   | { kind: 'reattach'; id: string; which: 'start' | 'end'; started: boolean; startScreen: Vec }
-  | { kind: 'eraser' };
+  | { kind: 'eraser' }
+  | { kind: 'pinch'; startDist: number; startMid: Vec; startCam: Camera };
+
+const DOUBLE_TAP_MS = 300;
 
 const ui = () => useUI.getState();
 const vp = () => useViewport.getState();
@@ -68,6 +76,9 @@ export class Interactions {
   private raf = 0;
   private pending: (() => void) | null = null;
   private gestureZoom: number | null = null;
+  /** Active touch points (screen coords) for pinch-zoom. */
+  private touches = new Map<number, Vec>();
+  private lastTap: { at: number; p: Vec } | null = null;
   /** Last pointer position in world coordinates (paste target). */
   lastWorld: Vec | null = null;
 
@@ -151,6 +162,44 @@ export class Interactions {
     return { kind: 'point', x: s.x, y: s.y };
   }
 
+  /** A second finger landed mid-gesture: drop whatever the first finger started. */
+  private cancelGesture() {
+    const g = this.g;
+    this.g = null;
+    cancelAnimationFrame(this.raf);
+    this.raf = 0;
+    this.pending = null;
+    if (!g) return;
+    const u = ui();
+    if ((g.kind === 'move' && g.started) || g.kind === 'eraser' || g.kind === 'pen') this.board.endGesture();
+    if (g.kind === 'move') {
+      u.setInteracting(false);
+      u.setGuides([]);
+    }
+    if (g.kind === 'marquee') u.setMarquee(null);
+    if (g.kind === 'pan') u.setPanning(false);
+    u.setDraft(null);
+    u.setAttachHover(null);
+  }
+
+  private pinchMetrics(): { dist: number; mid: Vec } {
+    const [a, b] = [...this.touches.values()] as [Vec, Vec];
+    return {
+      dist: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)),
+      mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+    };
+  }
+
+  private editAt(p: Vec) {
+    const u = ui();
+    if (u.tool !== 'select' || this.board.readOnly) return;
+    const hit = hitTest(this.board.store, p, 2 / vp().camera.zoom);
+    if (hit && hasText(hit) && !hit.locked) {
+      u.select([hit.id]);
+      u.setEditing(hit.id);
+    }
+  }
+
   private finishCreate(o: BoardObject, edit: boolean) {
     addObjects(this.board, [o]);
     const u = ui();
@@ -161,9 +210,21 @@ export class Interactions {
 
   // --- events ---
   onPointerDown = (e: PointerEvent) => {
-    if (this.g || isEditableTarget(e)) return;
-    const u = ui();
+    if (isEditableTarget(e)) return;
     const screen = this.screen(e);
+    if (e.pointerType === 'touch') {
+      this.touches.set(e.pointerId, screen);
+      if (this.touches.size === 2) {
+        // Two fingers: pinch-zoom + pan, whatever the first finger was doing.
+        this.cancelGesture();
+        const { dist: d, mid } = this.pinchMetrics();
+        this.g = { kind: 'pinch', startDist: d, startMid: mid, startCam: vp().camera };
+        e.preventDefault();
+        return;
+      }
+    }
+    if (this.g) return;
+    const u = ui();
     const p = this.world(e);
     this.lastWorld = p;
     if (u.editingId) u.setEditing(null);
@@ -172,7 +233,7 @@ export class Interactions {
     const node = this.getStage()?.getIntersection(screen);
     if (node) {
       const handle = node.getAttr('connectorHandle') as { id: string; which: 'start' | 'end' } | undefined;
-      if (handle && e.button === 0) {
+      if (handle && e.button === 0 && !this.board.readOnly) {
         this.g = { kind: 'reattach', ...handle, started: false, startScreen: screen };
         this.el.setPointerCapture(e.pointerId);
         return;
@@ -195,9 +256,16 @@ export class Interactions {
 
     const { store } = this.board;
     const zoom = vp().camera.zoom;
+    const readOnly = this.board.readOnly;
+    if (readOnly && u.tool !== 'select' && u.tool !== 'comment') return;
     switch (u.tool) {
       case 'select': {
-        const hit = hitTest(store, p, 2 / zoom);
+        const hit = hitTest(store, p, (e.pointerType === 'touch' ? 8 : 2) / zoom);
+        if (!hit && e.pointerType === 'touch') {
+          // One finger on empty canvas pans (marquee needs a mouse or pen).
+          this.g = { kind: 'pan', last: screen };
+          break;
+        }
         if (!hit) {
           this.g = { kind: 'marquee', start: p, startScreen: screen, base: e.shiftKey ? u.selectedIds : [] };
           if (!e.shiftKey) u.select([]);
@@ -210,7 +278,7 @@ export class Interactions {
         const origins = new Map<string, BoardObject>();
         for (const id of ui().selectedIds) {
           const o = store.get(id);
-          if (o && !o.locked) origins.set(id, o);
+          if (o && !o.locked && !readOnly) origins.set(id, o);
         }
         this.g = {
           kind: 'move',
@@ -229,8 +297,13 @@ export class Interactions {
       case 'rect':
       case 'ellipse':
       case 'triangle':
+      case 'frame':
         this.g = { kind: 'shape', shape: u.tool, start: this.snapPoint(p) };
         break;
+      case 'comment':
+        if (this.board.anonymous) return;
+        u.setCommentDraft(p);
+        return;
       case 'sticky': {
         const at = this.snapPoint({ x: p.x - STICKY_SIZE / 2, y: p.y - STICKY_SIZE / 2 });
         this.finishCreate(makeSticky(at, nextZ(store), u.stickyColor), true);
@@ -267,6 +340,15 @@ export class Interactions {
 
   onPointerMove = (e: PointerEvent) => {
     const screen = this.screen(e);
+    if (e.pointerType === 'touch' && this.touches.has(e.pointerId)) this.touches.set(e.pointerId, screen);
+    if (this.g?.kind === 'pinch') {
+      if (this.touches.size < 2) return;
+      const { startDist, startMid, startCam } = this.g;
+      const { dist: d, mid } = this.pinchMetrics();
+      const zoomed = zoomAt(startCam, startMid, startCam.zoom * (d / startDist));
+      vp().setCamera({ ...zoomed, x: zoomed.x + mid.x - startMid.x, y: zoomed.y + mid.y - startMid.y });
+      return;
+    }
     const p = this.world(e);
     this.lastWorld = p;
     this.board.presence.setCursor(p);
@@ -292,6 +374,18 @@ export class Interactions {
           g.started = true;
           this.board.beginGesture();
           u.setInteracting(true);
+          // Moving a frame carries everything fully inside it.
+          for (const o of [...g.origins.values()]) {
+            if (o.type !== 'frame') continue;
+            const frameRect = this.board.store.getBounds(o.id);
+            if (!frameRect) continue;
+            for (const id of this.board.store.query(frameRect)) {
+              const child = this.board.store.get(id);
+              const b = this.board.store.getBounds(id);
+              if (child && b && !child.locked && child.type !== 'frame' && rectContainsRect(frameRect, b))
+                g.origins.set(id, child);
+            }
+          }
           const moving = new Set(g.origins.keys());
           g.targets = this.board.store
             .query(vp().visibleRect())
@@ -324,7 +418,13 @@ export class Interactions {
         u.setMarquee(rect);
         const base = g.base;
         this.schedule(() => {
-          const hits = expandGroups(this.board.store, this.board.store.query(rect));
+          const store = this.board.store;
+          const ids = store.query(rect).filter((id) => {
+            if (store.get(id)?.type !== 'frame') return true;
+            const b = store.getBounds(id);
+            return !!b && rectContainsRect(rect, b);
+          });
+          const hits = expandGroups(store, ids);
           ui().select(uniq([...base, ...hits]));
         });
         break;
@@ -332,7 +432,7 @@ export class Interactions {
       case 'shape': {
         const end = this.snapPoint(p);
         let rect = rectFromPoints(g.start, end);
-        if (e.shiftKey) {
+        if (e.shiftKey && g.shape !== 'frame') {
           const s = Math.max(rect.w, rect.h);
           rect = {
             x: end.x < g.start.x ? g.start.x - s : g.start.x,
@@ -385,7 +485,27 @@ export class Interactions {
   };
 
   onPointerUp = (e: PointerEvent) => {
+    const wasTouch = e.pointerType === 'touch' && this.touches.delete(e.pointerId);
     const g = this.g;
+    if (g?.kind === 'pinch') {
+      if (this.touches.size < 2) this.g = null;
+      return;
+    }
+    if (wasTouch && e.type === 'pointerup') {
+      const p = this.world(e);
+      const now = performance.now();
+      const tap =
+        !g || (g.kind === 'move' && !g.started) || (g.kind === 'pan' && dist(g.last, this.screen(e)) < 10);
+      if (
+        tap &&
+        this.lastTap &&
+        now - this.lastTap.at < DOUBLE_TAP_MS &&
+        dist(this.lastTap.p, p) * vp().camera.zoom < 30
+      ) {
+        this.lastTap = null;
+        this.editAt(p);
+      } else if (tap) this.lastTap = { at: now, p };
+    }
     if (!g) return;
     this.g = null;
     this.flush();
@@ -418,11 +538,21 @@ export class Interactions {
         const zoom = vp().camera.zoom;
         let rect = draft?.kind === 'shape' ? draft.rect : null;
         if (!rect || (rect.w * zoom < DRAG_THRESHOLD && rect.h * zoom < DRAG_THRESHOLD)) {
-          const { w, h } = g.shape === 'rect' ? DEFAULT_SHAPE_SIZE : { w: 120, h: 120 };
+          const { w, h } =
+            g.shape === 'frame'
+              ? DEFAULT_FRAME_SIZE
+              : g.shape === 'rect'
+                ? DEFAULT_SHAPE_SIZE
+                : { w: 120, h: 120 };
           rect = { x: g.start.x - w / 2, y: g.start.y - h / 2, w, h };
         }
         rect = { ...rect, w: Math.max(rect.w, 8), h: Math.max(rect.h, 8) };
-        this.finishCreate(makeShape(g.shape, rect, nextZ(store)), false);
+        if (g.shape === 'frame') {
+          const n = [...store.all()].filter((o) => o.type === 'frame').length + 1;
+          this.finishCreate(makeFrame(rect, nextZ(store), `Frame ${n}`), false);
+        } else {
+          this.finishCreate(makeShape(g.shape, rect, nextZ(store)), false);
+        }
         break;
       }
       case 'pen': {
@@ -474,13 +604,8 @@ export class Interactions {
   }
 
   onDoubleClick = (e: MouseEvent) => {
-    const u = ui();
-    if (u.tool !== 'select' || isEditableTarget(e)) return;
-    const hit = hitTest(this.board.store, this.world(e), 2 / vp().camera.zoom);
-    if (hit && hasText(hit) && !hit.locked) {
-      u.select([hit.id]);
-      u.setEditing(hit.id);
-    }
+    if (isEditableTarget(e)) return;
+    this.editAt(this.world(e));
   };
 
   onWheel = (e: WheelEvent) => {

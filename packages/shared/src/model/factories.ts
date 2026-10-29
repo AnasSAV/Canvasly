@@ -4,6 +4,7 @@ import {
   STICKY_COLORS,
   type ConnectorEnd,
   type ConnectorObject,
+  type FrameObject,
   type ImageObject,
   type PenObject,
   type ShapeKind,
@@ -94,6 +95,26 @@ export function makeConnector(
     strokeWidth: 2,
     startCap: 'none',
     endCap: opts.arrow ? 'arrow' : 'none',
+  };
+}
+
+export const DEFAULT_FRAME_SIZE = { w: 800, h: 450 };
+
+export function makeFrame(
+  box: { x: number; y: number; w: number; h: number },
+  z: string,
+  name: string,
+): FrameObject {
+  return {
+    id: newId(),
+    type: 'frame',
+    z,
+    locked: false,
+    groupId: null,
+    ...box,
+    rotation: 0,
+    name,
+    fill: '#ffffff',
   };
 }
 

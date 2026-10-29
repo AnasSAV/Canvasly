@@ -1,4 +1,4 @@
-import { compareZ, distToSegment, worldToLocal, type BoardObject, type Vec } from '@canvasly/shared';
+import { comparePaint, distToSegment, worldToLocal, type BoardObject, type Vec } from '@canvasly/shared';
 import type { DocStore } from '../doc/store';
 
 function polylineDistance(points: readonly number[], p: Vec): number {
@@ -44,7 +44,7 @@ export function hitTest(
     .query({ x: p.x - radius, y: p.y - radius, w: radius * 2, h: radius * 2 })
     .map((id) => store.get(id))
     .filter((o): o is BoardObject => !!o && filter(o))
-    .sort(compareZ);
+    .sort(comparePaint);
   for (let i = candidates.length - 1; i >= 0; i--) {
     const o = candidates[i]!;
     // Connectors and strokes are thin; give them a slightly larger tolerance.

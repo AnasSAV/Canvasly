@@ -6,6 +6,7 @@ test('dashboard: create, open, rename and delete a board', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Your boards' })).toBeVisible();
   await page.getByTestId('new-board').first().click();
+  await page.getByTestId('template-blank').click();
   await expect(page).toHaveURL(/\/b\/[\w-]+$/);
   await expect(page.getByTestId('connection-status')).toHaveAttribute('data-status', 'online');
 

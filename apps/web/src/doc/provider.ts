@@ -3,7 +3,9 @@ import {
   CLOSE_BOARD_DELETED,
   HEARTBEAT_PING,
   HEARTBEAT_PONG,
+  CommentEvent,
   MSG_AWARENESS,
+  MSG_COMMENTS,
   MSG_ROLE,
   MSG_SYNC,
   Role,
@@ -14,6 +16,7 @@ import * as encoding from 'lib0/encoding';
 import * as awarenessProtocol from 'y-protocols/awareness';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
+import type { CommentsStore } from './comments';
 
 export type ConnectionStatus = 'connecting' | 'online' | 'offline' | 'denied';
 
@@ -54,8 +57,14 @@ export class SyncProvider {
     private readonly doc: Y.Doc,
     readonly awareness: awarenessProtocol.Awareness,
     private readonly url: string,
+    private readonly comments: CommentsStore,
   ) {
     this.synced = new Promise((r) => (this.resolveSynced = r));
+    comments.send = (op) => {
+      if (this.ws?.readyState !== WebSocket.OPEN) return false;
+      this.send(this.message(MSG_COMMENTS, (e) => encoding.writeVarString(e, JSON.stringify(op))));
+      return true;
+    };
     doc.on('update', this.onDocUpdate);
     awareness.on('update', this.onAwarenessUpdate);
     window.addEventListener('online', this.reconnectNow);
@@ -185,6 +194,9 @@ export class SyncProvider {
         }
       } else if (type === MSG_AWARENESS) {
         awarenessProtocol.applyAwarenessUpdate(this.awareness, decoding.readVarUint8Array(decoder), this);
+      } else if (type === MSG_COMMENTS) {
+        const event = CommentEvent.safeParse(JSON.parse(decoding.readVarString(decoder)));
+        if (event.success) this.comments.apply(event.data);
       } else if (type === MSG_ROLE) {
         const role = Role.safeParse(decoding.readVarString(decoder));
         this.role = role.success ? role.data : null;

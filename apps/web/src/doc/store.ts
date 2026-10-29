@@ -1,7 +1,7 @@
 import {
   aabb,
   changedObjectIds,
-  compareZ,
+  comparePaint,
   expandRect,
   fromYObject,
   isBoxObject,
@@ -82,7 +82,7 @@ export class DocStore {
   }
   /** All objects in paint order. */
   getSorted(): BoardObject[] {
-    this.sorted ??= [...this.objects.values()].sort(compareZ);
+    this.sorted ??= [...this.objects.values()].sort(comparePaint);
     return this.sorted;
   }
   getBounds(id: string): Rect | undefined {

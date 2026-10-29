@@ -2,12 +2,14 @@ import { hasText, patchObject, worldToScreen, type TextBearingObject } from '@ca
 import { useLayoutEffect, useRef } from 'react';
 import { useBoard, useDocVersion } from '../doc/context';
 import { deleteObjects } from '../doc/ops';
+import { useTheme } from '../state/theme';
 import { useUI } from '../state/ui';
+import { ink } from './colors';
 import { useViewport } from '../state/viewport';
 import { FONT_FAMILY, LINE_HEIGHT, SHAPE_PADDING, STICKY_PADDING, autoFontSize } from './text';
 
 /** Text layout for an object, in world units. */
-function layout(o: TextBearingObject) {
+function layout(o: TextBearingObject, dark: boolean) {
   switch (o.type) {
     case 'sticky':
       return {
@@ -18,13 +20,16 @@ function layout(o: TextBearingObject) {
         center: true,
       };
     case 'text':
-      return { pad: 0, fontSize: o.fontSize, align: o.align, color: o.color, center: false };
+      return { pad: 0, fontSize: o.fontSize, align: o.align, color: ink(o.color, dark), center: false };
     default:
       return {
         pad: SHAPE_PADDING,
         fontSize: Math.min(autoFontSize(o.text, o.w, o.h, SHAPE_PADDING), 28),
         align: 'center',
-        color: o.textColor,
+        color:
+          o.fill === 'transparent' || o.fill.toLowerCase() === '#ffffff'
+            ? ink(o.textColor, dark)
+            : o.textColor,
         center: true,
       };
   }
@@ -39,6 +44,7 @@ export function TextEditor() {
   useDocVersion(board);
   const editingId = useUI((s) => s.editingId);
   const camera = useViewport((s) => s.camera);
+  const dark = useTheme((s) => s.dark);
   const ref = useRef<HTMLTextAreaElement>(null);
   const obj = editingId ? board.store.get(editingId) : undefined;
   const o = obj && hasText(obj) ? obj : null;
@@ -63,7 +69,7 @@ export function TextEditor() {
   });
 
   if (!o) return null;
-  const { pad, fontSize, align, color, center } = layout(o);
+  const { pad, fontSize, align, color, center } = layout(o, dark);
   const pos = worldToScreen(camera, { x: o.x, y: o.y });
   const z = camera.zoom;
 

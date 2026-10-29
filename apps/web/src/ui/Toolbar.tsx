@@ -2,8 +2,10 @@ import { STICKY_COLORS, STROKE_COLORS } from '@canvasly/shared';
 import {
   Circle,
   Eraser,
+  Frame,
   Hand,
   ImagePlus,
+  MessageSquare,
   Minus,
   MousePointer2,
   MoveUpRight,
@@ -14,6 +16,7 @@ import {
   Type,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { useBoard } from '../doc/context';
 import { useUI, type Tool } from '../state/ui';
 import { IconButton, Swatch, panel } from './IconButton';
 
@@ -29,7 +32,12 @@ const TOOLS: { tool: Tool; label: string; key?: string; icon: ReactNode }[] = [
   { tool: 'arrow', label: 'Arrow / connector', key: 'A', icon: <MoveUpRight size={18} /> },
   { tool: 'pen', label: 'Pen', key: 'P', icon: <Pencil size={18} /> },
   { tool: 'eraser', label: 'Eraser (pen strokes)', key: 'E', icon: <Eraser size={18} /> },
+  { tool: 'frame', label: 'Frame', key: 'F', icon: <Frame size={18} /> },
+  { tool: 'comment', label: 'Comment', key: 'C', icon: <MessageSquare size={18} /> },
 ];
+
+/** Tools a viewer can use: look around and comment (anonymous visitors can't comment). */
+const VIEWER_TOOLS: Tool[] = ['select', 'hand', 'comment'];
 
 const PEN_SIZES = [2, 4, 8, 16];
 
@@ -60,10 +68,10 @@ function ToolOptions() {
               type="button"
               aria-label={`Pen size ${s}`}
               onClick={() => setPenSize(s)}
-              className={`flex h-7 w-7 items-center justify-center rounded-md ${s === penSize ? 'bg-indigo-100' : 'hover:bg-gray-100'}`}
+              className={`flex h-7 w-7 items-center justify-center rounded-md ${s === penSize ? 'bg-indigo-100 dark:bg-indigo-500/20' : 'hover:bg-gray-100 dark:hover:bg-zinc-800'}`}
             >
               <span
-                className="rounded-full bg-gray-800"
+                className="rounded-full bg-gray-800 dark:bg-zinc-200"
                 style={{ width: Math.min(s, 14), height: Math.min(s, 14) }}
               />
             </button>
@@ -76,16 +84,22 @@ function ToolOptions() {
 }
 
 export function Toolbar({ onImage }: { onImage: () => void }) {
+  const board = useBoard();
   const tool = useUI((s) => s.tool);
   const setTool = useUI((s) => s.setTool);
+  const readOnly = useUI((s) => s.readOnly);
+  const tools = TOOLS.filter(
+    (t) => (!readOnly || VIEWER_TOOLS.includes(t.tool)) && !(board.anonymous && t.tool === 'comment'),
+  );
   return (
-    <div className="pointer-events-none absolute top-1/2 left-3 z-10 flex -translate-y-1/2 items-start gap-2">
+    // Phones: a scrollable bar along the bottom. Larger screens: a vertical bar on the left.
+    <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 flex-col-reverse items-center gap-2 sm:top-1/2 sm:bottom-auto sm:left-3 sm:translate-x-0 sm:-translate-y-1/2 sm:flex-row sm:items-start">
       <div
-        className={`${panel} pointer-events-auto flex flex-col gap-0.5 p-1`}
+        className={`${panel} pointer-events-auto flex max-w-[calc(100vw-1.5rem)] flex-row gap-0.5 overflow-x-auto p-1 sm:flex-col sm:overflow-visible`}
         role="toolbar"
         aria-label="Tools"
       >
-        {TOOLS.map((t) => (
+        {tools.map((t) => (
           <IconButton
             key={t.tool}
             label={t.key ? `${t.label} (${t.key})` : t.label}
@@ -96,9 +110,11 @@ export function Toolbar({ onImage }: { onImage: () => void }) {
             {t.icon}
           </IconButton>
         ))}
-        <IconButton label="Upload image (I)" onClick={onImage} data-testid="tool-image">
-          <ImagePlus size={18} />
-        </IconButton>
+        {!readOnly && (
+          <IconButton label="Upload image (I)" onClick={onImage} data-testid="tool-image">
+            <ImagePlus size={18} />
+          </IconButton>
+        )}
       </div>
       <div className="pointer-events-auto">
         <ToolOptions />

@@ -6,6 +6,8 @@ export const MSG_SYNC = 0;
 export const MSG_AWARENESS = 1;
 /** Server -> client: the connection's role (varString). */
 export const MSG_ROLE = 3;
+/** Both directions: comment ops / events as a JSON varString (see schemas/comments.ts). */
+export const MSG_COMMENTS = 4;
 
 /** Client batches outgoing doc/awareness updates into one frame per interval (~20 frames/s max). */
 export const SYNC_BATCH_MS = 50;

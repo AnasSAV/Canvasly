@@ -18,6 +18,19 @@ function createAuth(env: Env) {
       password: { hash: hashPassword, verify: verifyPassword },
     },
     socialProviders: google,
+    databaseHooks: {
+      user: {
+        create: {
+          // Pending email invites become memberships, but only for verified emails (e.g. Google). Password
+          // sign-ups aren't verified until an email provider is configured, and anyone could register
+          // someone else's address.
+          after: async (user) => {
+            if (!user.emailVerified) return;
+            await claimInvites(env, user.id, user.email);
+          },
+        },
+      },
+    },
     session: {
       // Signed session data in a cookie avoids a D1 read on most requests.
       cookieCache: { enabled: true, maxAge: 5 * 60 },
@@ -26,6 +39,17 @@ function createAuth(env: Env) {
       ipAddress: { ipAddressHeaders: ['cf-connecting-ip'] },
     },
   });
+}
+
+async function claimInvites(env: Env, userId: string, email: string) {
+  const now = Date.now();
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO board_members (board_id, user_id, role, created_at)
+       SELECT board_id, ?1, role, ?2 FROM board_invites WHERE email = ?3 COLLATE NOCASE`,
+    ).bind(userId, now, email),
+    env.DB.prepare('DELETE FROM board_invites WHERE email = ? COLLATE NOCASE').bind(email),
+  ]);
 }
 
 export type Auth = ReturnType<typeof createAuth>;

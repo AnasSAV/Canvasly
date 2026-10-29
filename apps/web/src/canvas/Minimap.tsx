@@ -21,6 +21,8 @@ function colorOf(o: BoardObject): string | null {
       return '#94a3b8';
     case 'text':
       return '#9ca3af';
+    case 'frame':
+      return '#e4e4e7';
     case 'connector':
       return null;
   }
@@ -83,7 +85,7 @@ export function Minimap() {
   };
 
   return (
-    <div className={`${panel} absolute right-3 bottom-3 z-10 overflow-hidden`}>
+    <div className={`${panel} absolute right-3 bottom-3 z-10 hidden overflow-hidden sm:block`}>
       <canvas
         ref={canvasRef}
         style={{ width: W, height: H }}

@@ -1,13 +1,20 @@
 import {
+  CLOSE_ACCESS_REVOKED,
   CLOSE_BOARD_DELETED,
+  CommentOp,
   HEARTBEAT_PING,
   HEARTBEAT_PONG,
   MSG_AWARENESS,
+  MSG_COMMENTS,
   MSG_ROLE,
   MSG_SYNC,
   Role,
   can,
+  getObjectsMap,
+  insertObject,
   newId,
+  type BoardObject,
+  type CommentEvent,
 } from '@canvasly/shared';
 import { DurableObject } from 'cloudflare:workers';
 import * as decoding from 'lib0/decoding';
@@ -15,6 +22,7 @@ import * as encoding from 'lib0/encoding';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
 import { decodeAwarenessUpdate, encodeAwarenessUpdate, type AwarenessEntry } from './awareness';
+import { CommentError, CommentStore } from './comments';
 import { DocStorage } from './storage';
 
 /** Per-socket state; serialized onto the WebSocket so it survives hibernation. */
@@ -22,6 +30,8 @@ interface Conn {
   userId: string;
   name: string;
   role: Role;
+  /** Public-link visitor without an account: read-only, can't comment. */
+  anonymous: boolean;
   /** Awareness client ids announced on this socket -> clock when first seen. */
   awareness: Record<number, number>;
 }
@@ -34,6 +44,7 @@ export const TRUSTED_HEADERS = {
   userId: 'x-canvasly-user-id',
   userName: 'x-canvasly-user-name',
   role: 'x-canvasly-role',
+  anonymous: 'x-canvasly-anonymous',
 } as const;
 
 function message(type: number, write: (e: encoding.Encoder) => void): Uint8Array {
@@ -42,6 +53,9 @@ function message(type: number, write: (e: encoding.Encoder) => void): Uint8Array
   write(e);
   return encoding.toUint8Array(e);
 }
+
+const commentMessage = (event: CommentEvent) =>
+  message(MSG_COMMENTS, (e) => encoding.writeVarString(e, JSON.stringify(event)));
 
 function send(ws: WebSocket, data: Uint8Array) {
   try {
@@ -62,6 +76,7 @@ function send(ws: WebSocket, data: Uint8Array) {
 export class BoardRoom extends DurableObject<Env> {
   private _doc: Y.Doc | null = null;
   private readonly storage: DocStorage;
+  private readonly comments: CommentStore;
   private pending: Uint8Array[] = [];
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private firstPendingAt = 0;
@@ -72,6 +87,7 @@ export class BoardRoom extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.storage = new DocStorage(ctx.storage);
+    this.comments = new CommentStore(ctx.storage.sql);
     // Heartbeats are answered by the runtime without waking (or billing duration for) a hibernated room.
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(HEARTBEAT_PING, HEARTBEAT_PONG));
   }
@@ -106,6 +122,7 @@ export class BoardRoom extends DurableObject<Env> {
       userId,
       name: decodeURIComponent(request.headers.get(TRUSTED_HEADERS.userName) ?? ''),
       role: role.data,
+      anonymous: request.headers.get(TRUSTED_HEADERS.anonymous) === '1',
       awareness: {},
     };
     server.serializeAttachment(conn);
@@ -118,6 +135,7 @@ export class BoardRoom extends DurableObject<Env> {
       server,
       message(MSG_SYNC, (e) => syncProtocol.writeSyncStep1(e, this.doc)),
     );
+    send(server, commentMessage({ type: 'snapshot', threads: this.comments.all() }));
     if (this.awareness.size) {
       const update = encodeAwarenessUpdate([...this.awareness.values()]);
       send(
@@ -137,6 +155,7 @@ export class BoardRoom extends DurableObject<Env> {
         const type = decoding.readVarUint(decoder);
         if (type === MSG_SYNC) this.handleSync(ws, conn, decoder);
         else if (type === MSG_AWARENESS) this.handleAwareness(ws, conn, decoding.readVarUint8Array(decoder));
+        else if (type === MSG_COMMENTS) this.handleComment(ws, conn, decoding.readVarString(decoder));
         else break; // unknown message type: ignore the rest of the frame
       }
     } catch (err) {
@@ -173,6 +192,30 @@ export class BoardRoom extends DurableObject<Env> {
     if (changedConn) ws.serializeAttachment(conn);
     const msg = message(MSG_AWARENESS, (e) => encoding.writeVarUint8Array(e, update));
     for (const other of this.ctx.getWebSockets()) if (other !== ws) send(other, msg);
+  }
+
+  private handleComment(ws: WebSocket, conn: Conn, json: string) {
+    const op = CommentOp.safeParse(JSON.parse(json));
+    if (!op.success) return send(ws, commentMessage({ type: 'error', message: 'Invalid comment' }));
+    if (conn.anonymous || !can(conn.role, 'comment')) {
+      return send(ws, commentMessage({ type: 'error', message: 'Sign in to comment' }));
+    }
+    try {
+      const result = this.comments.apply(op.data, {
+        userId: conn.userId,
+        name: conn.name,
+        moderator: can(conn.role, 'edit'),
+      });
+      const event: CommentEvent =
+        'removed' in result
+          ? { type: 'remove', threadId: result.removed }
+          : { type: 'upsert', thread: result };
+      const msg = commentMessage(event);
+      for (const s of this.ctx.getWebSockets()) send(s, msg);
+    } catch (err) {
+      if (!(err instanceof CommentError)) throw err;
+      send(ws, commentMessage({ type: 'error', message: err.message }));
+    }
   }
 
   override async webSocketClose(ws: WebSocket): Promise<void> {
@@ -242,6 +285,39 @@ export class BoardRoom extends DurableObject<Env> {
 
   async getAsset(id: string): Promise<{ mime: string; data: ArrayBuffer } | null> {
     return this.storage.getAsset(id);
+  }
+
+  /** Starting content for a new board (templates). Ignored if the board already has content. */
+  async seed(objects: BoardObject[]): Promise<void> {
+    const map = getObjectsMap(this.doc);
+    if (map.size > 0) return;
+    this.doc.transact(() => objects.forEach((o) => insertObject(map, o)), 'seed');
+  }
+
+  /** A member's role changed (or was removed, role = null): apply it to their open sockets right away. */
+  async setUserRole(userId: string, role: Role | null): Promise<void> {
+    for (const ws of this.ctx.getWebSockets()) {
+      const conn = ws.deserializeAttachment() as Conn | null;
+      if (!conn || conn.anonymous || conn.userId !== userId) continue;
+      if (role === null) {
+        ws.close(CLOSE_ACCESS_REVOKED, 'Access removed');
+        continue;
+      }
+      conn.role = role;
+      ws.serializeAttachment(conn);
+      send(
+        ws,
+        message(MSG_ROLE, (e) => encoding.writeVarString(e, role)),
+      );
+    }
+  }
+
+  /** The public link was disabled or rotated: disconnect anonymous visitors. */
+  async revokeAnonymous(): Promise<void> {
+    for (const ws of this.ctx.getWebSockets()) {
+      const conn = ws.deserializeAttachment() as Conn | null;
+      if (conn?.anonymous) ws.close(CLOSE_ACCESS_REVOKED, 'Link disabled');
+    }
   }
 
   /** Board deleted: disconnect everyone and wipe all storage for this object. */

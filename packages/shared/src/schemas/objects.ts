@@ -67,6 +67,13 @@ export const ImageObject = Box.extend({
   naturalH: z.number().positive(),
 });
 
+/** Named area; objects inside move with it and it's a page in presentation mode / PDF export. */
+export const FrameObject = Box.extend({
+  type: z.literal('frame'),
+  name: z.string().max(80),
+  fill: Color,
+});
+
 /** Anchor in the attached object's local box, normalized 0..1. 'auto' clips toward the other end. */
 export const Anchor = z.union([z.literal('auto'), z.tuple([z.number(), z.number()])]);
 
@@ -95,6 +102,7 @@ export const BoardObject = z.discriminatedUnion('type', [
   PenObject,
   ImageObject,
   ConnectorObject,
+  FrameObject,
 ]);
 
 export type StickyObject = z.infer<typeof StickyObject>;
@@ -105,6 +113,7 @@ export type TriangleObject = z.infer<typeof TriangleObject>;
 export type PenObject = z.infer<typeof PenObject>;
 export type ImageObject = z.infer<typeof ImageObject>;
 export type ConnectorObject = z.infer<typeof ConnectorObject>;
+export type FrameObject = z.infer<typeof FrameObject>;
 export type ConnectorEnd = z.infer<typeof ConnectorEnd>;
 export type Anchor = z.infer<typeof Anchor>;
 export type BoardObject = z.infer<typeof BoardObject>;

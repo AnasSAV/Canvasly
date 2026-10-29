@@ -1,6 +1,7 @@
 import { getObjectsMap, type YObjects } from '@canvasly/shared';
 import { IndexeddbPersistence } from 'y-indexeddb';
 import * as Y from 'yjs';
+import { CommentsStore } from './comments';
 import { Presence, type PresenceUser } from './presence';
 import { SyncProvider } from './provider';
 import { DocStore } from './store';
@@ -27,22 +28,39 @@ export class Board {
   readonly undo: Y.UndoManager;
   readonly persistence: IndexeddbPersistence;
   readonly presence: Presence;
+  readonly comments = new CommentsStore();
   readonly provider: SyncProvider | null;
   readonly ready: Promise<void>;
+  /** Base URL for this board's images: /api/boards/:id, or /api/public/:token for public links. */
+  readonly assetBase: string;
+  readonly anonymous: boolean;
+  /**
+   * Viewers can't edit. The server drops their updates anyway; refusing them locally keeps the UI from
+   * showing changes that will never sync.
+   */
+  readOnly = false;
 
   constructor(
     readonly id: string,
-    socketUrl: string | null,
-    user: PresenceUser,
+    opts: { socketUrl: string | null; user: PresenceUser; assetBase: string; anonymous?: boolean },
   ) {
-    this.persistence = new IndexeddbPersistence(`canvasly-board-${id}`, this.doc);
+    const { socketUrl, user } = opts;
+    this.assetBase = opts.assetBase;
+    this.anonymous = !!opts.anonymous;
+    // Anonymous visitors get a separate cache namespace (and nothing is shared with signed-in sessions).
+    this.persistence = new IndexeddbPersistence(
+      `canvasly-board-${this.anonymous ? 'public-' : ''}${id}`,
+      this.doc,
+    );
     this.store = new DocStore(this.objects);
     this.undo = new Y.UndoManager(this.objects, {
       trackedOrigins: new Set([LOCAL_ORIGIN]),
       captureTimeout: CAPTURE_TIMEOUT,
     });
     this.presence = new Presence(this.doc, user);
-    this.provider = socketUrl ? new SyncProvider(this.doc, this.presence.awareness, socketUrl) : null;
+    this.provider = socketUrl
+      ? new SyncProvider(this.doc, this.presence.awareness, socketUrl, this.comments)
+      : null;
     const cached = this.persistence.whenSynced.then(() => undefined);
     this.ready = this.provider
       ? Promise.race([
@@ -60,6 +78,7 @@ export class Board {
    * own step, however quickly they follow the previous one.
    */
   transact(fn: () => void, discrete = false) {
+    if (this.readOnly) return;
     const split = discrete && !this.inGesture;
     if (split) this.undo.stopCapturing();
     this.doc.transact(fn, LOCAL_ORIGIN);

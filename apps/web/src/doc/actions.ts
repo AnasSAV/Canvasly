@@ -32,26 +32,30 @@ export function createActions(board: Board, getPointerWorld: () => Vec | null) {
   /** In-app clipboard fallback for when the system clipboard is unavailable. */
   let memoryClipboard: ClipboardPayload | null = null;
 
+  /** Viewers can look and copy; anything that changes the board is a no-op for them. */
+  const editable = () => !board.readOnly;
+
   const actions = {
-    undo: () => board.undo.undo(),
-    redo: () => board.undo.redo(),
+    undo: () => editable() && board.undo.undo(),
+    redo: () => editable() && board.undo.redo(),
     deleteSelected: () => {
+      if (!editable()) return;
       deleteObjects(board, sel());
       ui().select(sel().filter((id) => board.store.has(id)));
     },
-    duplicateSelected: () => ui().select(duplicate(board, sel())),
+    duplicateSelected: () => editable() && ui().select(duplicate(board, sel())),
     selectAll: () => ui().select(board.store.getSorted().map((o) => o.id)),
     deselect: () => {
       ui().select([]);
       ui().setTool('select');
       ui().setFollowing(null);
     },
-    group: () => group(board, sel()),
-    ungroup: () => ungroup(board, sel()),
-    toggleLock: () => toggleLock(board, sel()),
-    bringToFront: () => bringToFront(board, sel()),
-    sendToBack: () => sendToBack(board, sel()),
-    nudge: (dx: number, dy: number) => nudge(board, sel(), dx, dy),
+    group: () => editable() && group(board, sel()),
+    ungroup: () => editable() && ungroup(board, sel()),
+    toggleLock: () => editable() && toggleLock(board, sel()),
+    bringToFront: () => editable() && bringToFront(board, sel()),
+    sendToBack: () => editable() && sendToBack(board, sel()),
+    nudge: (dx: number, dy: number) => editable() && nudge(board, sel(), dx, dy),
     zoomToFit: () => {
       const ids = sel();
       useViewport.getState().fit(ids.length ? selectionBounds(board.store, ids) : contentBounds(board.store));
@@ -65,12 +69,14 @@ export function createActions(board: Board, getPointerWorld: () => Vec | null) {
       return JSON.stringify(payload);
     },
     cut: (): string | null => {
+      if (!editable()) return null;
       const text = actions.copy();
       if (text) actions.deleteSelected();
       return text;
     },
     /** Paste canvasly JSON (or the in-app clipboard when empty); other plain text becomes a sticky note. */
     pasteText: (text: string | null) => {
+      if (!editable()) return;
       let payload: ClipboardPayload | null = null;
       if (text) {
         try {
@@ -97,6 +103,7 @@ export function createActions(board: Board, getPointerWorld: () => Vec | null) {
     },
 
     insertImages: async (files: Iterable<File>, at?: Vec) => {
+      if (!editable()) return;
       let pos = at ?? viewCenter();
       const created: string[] = [];
       for (const file of files) {

@@ -36,7 +36,8 @@ function SelectionTransformer({ stage }: { stage: Konva.Stage | null }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [selectedIds, version, board],
   );
-  const anyLocked = boxes.some((o) => o.locked);
+  const readOnly = useUI((s) => s.readOnly);
+  const anyLocked = boxes.some((o) => o.locked) || readOnly;
   const single = boxes.length === 1 ? boxes[0]! : null;
 
   useEffect(() => {
@@ -159,6 +160,7 @@ function ConnectorSelection({ zoom }: { zoom: number }) {
       })}
       {conns.length === 1 &&
         !conns[0]!.locked &&
+        !useUI.getState().readOnly &&
         (['start', 'end'] as const).map((which) => {
           const c = conns[0]!;
           const r = board.store.resolve(c);

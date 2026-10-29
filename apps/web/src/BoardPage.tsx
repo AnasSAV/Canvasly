@@ -1,5 +1,5 @@
-import { BoardSummary, can, screenToWorld } from '@canvasly/shared';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { BoardSummary, can, screenToWorld, type Role } from '@canvasly/shared';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { BoardCanvas } from './canvas/BoardCanvas';
 import type { Interactions } from './canvas/interactions';
 import { Minimap } from './canvas/Minimap';
@@ -7,29 +7,43 @@ import { exposeForDebugging } from './debug';
 import { createActions } from './doc/actions';
 import { Board } from './doc/board';
 import { BoardContext } from './doc/context';
-import type { PresenceUser } from './doc/presence';
 import { contentBounds } from './doc/ops';
 import { useFollow, usePresencePublisher } from './hooks/usePresence';
 import { useShortcuts } from './hooks/useShortcuts';
 import { useThumbnailUploader } from './hooks/useThumbnailUploader';
-import { ApiError, api, boardSocketUrl } from './lib/api';
+import { ApiError, api, boardSocketUrl, publicSocketUrl } from './lib/api';
 import { authClient } from './lib/auth';
-import { Link } from './lib/router';
+import { Link, navigate } from './lib/router';
+import { AuthPage } from './pages/AuthPage';
 import { useUI } from './state/ui';
 import { useViewport } from './state/viewport';
+import { CommentsLayer, CommentsPanel } from './ui/Comments';
+import { FramesPanel, Presentation } from './ui/Frames';
 import { FollowBanner, RemoteCursors } from './ui/Presence';
 import { SelectionToolbar } from './ui/SelectionToolbar';
+import { ShareDialog } from './ui/ShareDialog';
 import { Toolbar } from './ui/Toolbar';
 import { TopBar } from './ui/TopBar';
 import { ZoomControls } from './ui/ZoomControls';
 
-function useBoardInstance(boardId: string | null, user: PresenceUser | null): Board | null {
+/** How the board was opened: as a member, or anonymously through a public view-only link. */
+export type BoardMode = { kind: 'member' } | { kind: 'public'; token: string };
+
+interface BoardInit {
+  id: string;
+  socketUrl: string;
+  assetBase: string;
+  user: { id: string; name: string };
+  anonymous: boolean;
+}
+
+function useBoardInstance(init: BoardInit | null): Board | null {
   const [board, setBoard] = useState<Board | null>(null);
-  const userId = user?.id;
-  const userName = user?.name;
+  const key = init && JSON.stringify(init);
   useEffect(() => {
-    if (!boardId || !userId) return;
-    const b = new Board(boardId, boardSocketUrl(boardId), { id: userId, name: userName ?? '' });
+    if (!key) return;
+    const { id, ...opts } = JSON.parse(key) as BoardInit;
+    const b = new Board(id, opts);
     let alive = true;
     void b.ready.then(() => alive && setBoard(b));
     return () => {
@@ -37,7 +51,7 @@ function useBoardInstance(boardId: string | null, user: PresenceUser | null): Bo
       setBoard(null);
       b.destroy();
     };
-  }, [boardId, userId, userName]);
+  }, [key]);
   return board;
 }
 
@@ -62,12 +76,19 @@ function cachedMeta(id: string): BoardSummary | null {
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-gray-500">
+    <div className="flex h-full flex-col items-center justify-center gap-3 bg-gray-50 text-sm text-gray-500 dark:bg-zinc-950 dark:text-zinc-400">
       {children}
     </div>
   );
 }
 
+const backLink = (
+  <Link to="/" className="font-medium text-indigo-600 hover:underline dark:text-indigo-400">
+    Back to your boards
+  </Link>
+);
+
+/** A board the signed-in user is a member of. */
 export function BoardPage({ boardId }: { boardId: string }) {
   const [meta, setMeta] = useState<BoardSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -90,15 +111,24 @@ export function BoardPage({ boardId }: { boardId: string }) {
         else setError("You're offline and this board isn't available on this device yet.");
       });
   }, [boardId]);
-  const board = useBoardInstance(meta ? boardId : null, session?.user ?? null);
+  const user = session?.user;
+  const board = useBoardInstance(
+    meta && user
+      ? {
+          id: boardId,
+          socketUrl: boardSocketUrl(boardId),
+          assetBase: `/api/boards/${boardId}`,
+          user: { id: user.id, name: user.name },
+          anonymous: false,
+        }
+      : null,
+  );
 
   if (error) {
     return (
       <Centered>
         <p>{error}</p>
-        <Link to="/" className="font-medium text-indigo-600 hover:underline">
-          Back to your boards
-        </Link>
+        {backLink}
       </Centered>
     );
   }
@@ -108,6 +138,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
       <BoardView
         board={board}
         meta={meta}
+        mode={{ kind: 'member' }}
         onMetaChange={(m) => {
           cacheMeta(m);
           setMeta(m);
@@ -117,17 +148,91 @@ export function BoardPage({ boardId }: { boardId: string }) {
   );
 }
 
+/** Anonymous, view-only access through a public link. */
+function PublicBoardPage({ token, meta }: { token: string; meta: BoardSummary }) {
+  const guest = useMemo(() => ({ id: `guest-${crypto.randomUUID()}`, name: 'Guest' }), []);
+  const board = useBoardInstance({
+    id: meta.id,
+    socketUrl: publicSocketUrl(token),
+    assetBase: `/api/public/${token}`,
+    user: guest,
+    anonymous: true,
+  });
+  if (!board) return <Centered>Loading board…</Centered>;
+  return (
+    <BoardContext value={board}>
+      <BoardView board={board} meta={meta} mode={{ kind: 'public', token }} onMetaChange={() => {}} />
+    </BoardContext>
+  );
+}
+
+/**
+ * /s/:token — signed in: join the board with the link's role and open it. Signed out: open view-only
+ * links anonymously; links that grant editing ask you to sign in first.
+ */
+export function SharedLinkPage({ token }: { token: string }) {
+  const { data: session, isPending } = authClient.useSession();
+  const [publicMeta, setPublicMeta] = useState<BoardSummary | null>(null);
+  const [state, setState] = useState<'loading' | 'needs-login' | 'error'>('loading');
+
+  useEffect(() => {
+    if (isPending) return;
+    if (session) {
+      api
+        .joinByLink(token)
+        .then(({ boardId }) => navigate(`/b/${boardId}`, { replace: true }))
+        .catch(() => setState('error'));
+      return;
+    }
+    api
+      .publicBoard(token)
+      .then((b) =>
+        setPublicMeta({
+          id: b.id,
+          title: b.title,
+          role: 'viewer',
+          ownerName: '',
+          createdAt: 0,
+          updatedAt: 0,
+          thumbnailVersion: null,
+        }),
+      )
+      .catch(() => setState('needs-login'));
+  }, [token, session, isPending]);
+
+  if (publicMeta && !session) return <PublicBoardPage token={token} meta={publicMeta} />;
+  if (state === 'needs-login') return <AuthPage />;
+  if (state === 'error') {
+    return (
+      <Centered>
+        <p>This link is no longer valid.</p>
+        {backLink}
+      </Centered>
+    );
+  }
+  return <Centered>Opening board…</Centered>;
+}
+
+function useLiveRole(board: Board, initial: Role): Role {
+  const provider = board.provider;
+  const live = useSyncExternalStore(provider?.subscribe ?? (() => () => {}), () => provider?.role ?? null);
+  return live ?? initial;
+}
+
 function BoardView({
   board,
   meta,
+  mode,
   onMetaChange,
 }: {
   board: Board;
   meta: BoardSummary;
+  mode: BoardMode;
   onMetaChange: (m: BoardSummary) => void;
 }) {
   const interactionsRef = useRef<Interactions | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [shareOpen, setShareOpen] = useState(false);
   const onInteractions = useCallback((i: Interactions | null) => {
     interactionsRef.current = i;
   }, []);
@@ -137,9 +242,25 @@ function BoardView({
   );
   const openImagePicker = useCallback(() => fileRef.current?.click(), []);
   useShortcuts(actions, openImagePicker);
-  const flushThumbnail = useThumbnailUploader(board, can(meta.role, 'edit'));
+
+  // The server can change our role at any time (owner edits sharing); the UI follows.
+  const role = useLiveRole(board, meta.role);
+  const canEdit = can(role, 'edit');
+  board.readOnly = !canEdit;
+  useEffect(() => {
+    useUI.getState().setReadOnly(!canEdit);
+    if (role !== meta.role && mode.kind === 'member') onMetaChange({ ...meta, role });
+  }, [canEdit, role, meta, mode.kind, onMetaChange]);
+
+  const flushThumbnail = useThumbnailUploader(board, mode.kind === 'member' && canEdit);
   usePresencePublisher(board);
   useFollow(board);
+
+  const status = useSyncExternalStore(
+    board.provider?.subscribe ?? (() => () => {}),
+    () => board.provider?.status ?? null,
+  );
+  const presenting = useUI((s) => s.presenting !== null);
 
   // UI state is global; start each board with a clean slate.
   useEffect(() => {
@@ -149,6 +270,9 @@ function BoardView({
       tool: 'select',
       draft: null,
       followingClientId: null,
+      commentDraft: null,
+      openThreadId: null,
+      presenting: null,
     });
   }, [board]);
 
@@ -182,12 +306,22 @@ function BoardView({
     useViewport.getState().fit(contentBounds(board.store));
   }, [board, width]);
 
+  if (status === 'denied') {
+    return (
+      <Centered>
+        <p>{mode.kind === 'public' ? 'This link was disabled.' : 'Your access to this board was removed.'}</p>
+        {mode.kind === 'member' && backLink}
+      </Centered>
+    );
+  }
+
   return (
     <div
-      className="relative h-full w-full"
+      className="relative h-full w-full overflow-hidden"
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();
+        if (!canEdit) return;
         const r = e.currentTarget.getBoundingClientRect();
         const at = screenToWorld(useViewport.getState().camera, {
           x: e.clientX - r.left,
@@ -197,19 +331,31 @@ function BoardView({
       }}
     >
       <BoardCanvas onInteractions={onInteractions} />
+      <CommentsLayer />
       <RemoteCursors />
-      <FollowBanner />
-      <TopBar
-        board={board}
-        actions={actions}
-        meta={meta}
-        onMetaChange={onMetaChange}
-        beforeLeave={flushThumbnail}
-      />
-      <Toolbar onImage={openImagePicker} />
-      <SelectionToolbar actions={actions} />
-      <ZoomControls onFit={actions.zoomToFit} />
-      <Minimap />
+      {presenting ? (
+        <Presentation />
+      ) : (
+        <>
+          <FollowBanner />
+          <TopBar
+            board={board}
+            actions={actions}
+            meta={meta}
+            mode={mode}
+            onMetaChange={onMetaChange}
+            beforeLeave={flushThumbnail}
+            onShare={() => setShareOpen(true)}
+          />
+          <Toolbar onImage={openImagePicker} />
+          <SelectionToolbar actions={actions} />
+          <ZoomControls onFit={actions.zoomToFit} />
+          <Minimap />
+          <CommentsPanel />
+          <FramesPanel />
+        </>
+      )}
+      {shareOpen && <ShareDialog boardId={meta.id} onClose={() => setShareOpen(false)} />}
       <input
         ref={fileRef}
         type="file"

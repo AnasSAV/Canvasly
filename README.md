@@ -3,10 +3,10 @@
 A Miro-style collaborative whiteboard that runs entirely on Cloudflare's **Workers Free** plan — no
 credit card, no servers that sleep, $0 hosting.
 
-> **Status:** Phase 3 of 4 — infinite canvas, accounts (email/password + optional Google), dashboard
-> with thumbnails, boards persisted in a per-board Durable Object, and real-time collaboration (live
-> cursors, presence, follow mode, per-user undo, offline edits). Sharing, comments, frames and export
-> arrive in Phase 4.
+**Features:** infinite canvas (stickies, text, shapes, connectors, pen, images, frames), accounts
+(email/password + optional Google), dashboard with thumbnails and templates, real-time collaboration
+(live cursors, presence, follow mode, per-user undo, offline edits), sharing with roles and public
+links, comments, presentation mode, PNG/PDF/JSON export and JSON import, dark mode, and touch support.
 
 ## Architecture
 
@@ -67,6 +67,52 @@ credit card, no servers that sleep, $0 hosting.
   A board opened before can be reopened offline (metadata cached locally). The app shell itself isn't
   cached for offline loads (no service worker).
 
+### Sharing & permissions
+
+| Role                     | View | Comment | Edit | Rename | Share / delete |
+| ------------------------ | :--: | :-----: | :--: | :----: | :------------: |
+| Owner                    |  ✓   |    ✓    |  ✓   |   ✓    |       ✓        |
+| Editor                   |  ✓   |    ✓    |  ✓   |   ✓    |                |
+| Viewer                   |  ✓   |    ✓    |      |        |                |
+| Public link (no account) |  ✓   |         |      |        |                |
+
+- One table ([`permissions.ts`](packages/shared/src/permissions.ts)) drives the Worker, the Durable
+  Object and the UI. Enforcement is server-side: the DO drops document updates from viewer sockets, the
+  Worker checks the role on every HTTP request, and comments are authored by the server from the
+  authenticated socket (they can't be forged by a client).
+- Role changes and removals apply **live**: the Worker tells the DO, which pushes the new role to open
+  sockets (the UI unlocks/locks without a reload) or disconnects them.
+- **Share dialog** (owner): invite by email as editor/viewer, change roles, remove people, and set link
+  access — _Off_, _Anyone can view_ (public, no sign-in; anonymous visitors connect as read-only guests)
+  or _Signed-in users can edit_ (opening the link adds you as an editor). Links can be reset, which
+  disconnects anonymous viewers using the old one.
+- **Invites and unverified email:** until an email provider is configured, email/password accounts are
+  unverified, so anyone could register someone else's address. Inviting an _existing_ account grants
+  access immediately (the dialog shows the account's name so you can check it's the right person);
+  pending invites for unknown emails are claimed automatically only by **verified** emails (Google
+  sign-in). Use the share link for everyone else. Adding an email provider later lets password accounts
+  verify and claim invites too.
+
+### Comments, frames, templates, export
+
+- **Comments** (tool `C`): pinned to canvas positions, threaded replies, resolve/reopen, delete own (editors
+  can delete any). Stored in the board's DO SQLite and pushed live to everyone; a side panel lists all
+  threads. Viewers can comment; anonymous public visitors can only read.
+- **Frames** (tool `F`): named areas that carry their contents when moved, always drawn beneath other
+  objects. The frames panel jumps to a frame, renames it, and starts **presentation mode** (full screen,
+  arrows/space/PageUp-Down to navigate, Esc to exit).
+- **Templates:** blank, kanban, retrospective, mind map, flowchart — generated in
+  [`templates.ts`](packages/shared/src/model/templates.ts) and seeded into the new board's DO server-side.
+- **Export:** board or selection as PNG (2×), PDF with one page per frame (or one page for the board), and
+  a portable `.canvasly.json` (objects + embedded images) that can be imported into any board. Exports are
+  rendered from the document with a canvas-2D renderer, not screenshots, so off-screen objects are
+  included; they always use the light theme. jsPDF is loaded on demand.
+- **Dark mode:** light/dark/system toggle. Board colors are stored as authored; in dark mode only the
+  default ink (`#1a1a1a`) and paper (`#ffffff`) colors are swapped at render time.
+- **Touch & small screens:** one finger pans the empty canvas or drags objects, two fingers pinch-zoom,
+  double-tap edits text; on phones the toolbar moves to a scrollable bottom bar and the minimap/zoom
+  controls hide.
+
 ### Data model
 
 **Yjs document** (per board): `objects: Y.Map<id, Y.Map>` — every object has `id, type, z` (fractional
@@ -75,10 +121,11 @@ reference shapes by id (`{ kind: 'attached', objectId, anchor }`) so they follow
 discriminated unions in [`packages/shared/src/schemas/objects.ts`](packages/shared/src/schemas/objects.ts).
 
 **D1** ([`apps/worker/migrations`](apps/worker/migrations)): Better Auth's `user / session / account /
-verification`, plus `boards`, `board_members (board_id, user_id, role)` and `board_thumbnails`.
+verification`, plus `boards (… link_role, link_token)`, `board_members (board_id, user_id, role)`,
+`board_invites (board_id, email, role)` and `board_thumbnails`.
 
 **Durable Object SQLite**: `doc_snapshot (seq, data)` chunks (< 2 MB rows), `doc_updates` log,
-`assets (id, mime, bytes, data)`.
+`assets (id, mime, bytes, data)`, `comment_threads (id, x, y, resolved)` and `comments`.
 
 ### Images and the size trade-off
 
@@ -193,6 +240,7 @@ packages/shared   Zod schemas, permissions, wire protocol, geometry, Yjs documen
 | L / A                           | Line / Arrow (connector)                    |
 | P / E                           | Pen / Eraser (pen strokes)                  |
 | I                               | Upload image                                |
+| F / C                           | Frame / Comment                             |
 | Space + drag, middle/right drag | Pan                                         |
 | Ctrl/⌘ + wheel, pinch           | Zoom at cursor                              |
 | Shift+1 / Shift+0               | Zoom to fit / 100%                          |
@@ -205,3 +253,5 @@ packages/shared   Zod schemas, permissions, wire protocol, geometry, Yjs documen
 | Enter / double-click            | Edit text                                   |
 | Del / Backspace, Esc            | Delete, Deselect                            |
 | Alt while dragging              | Disable alignment snapping                  |
+| ← → / Space / Esc (presenting)  | Previous / next frame / exit                |
+| Touch: drag, pinch, double-tap  | Pan, zoom, edit text                        |

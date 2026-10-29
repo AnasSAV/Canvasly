@@ -3,7 +3,9 @@ import type Konva from 'konva';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Layer, Stage } from 'react-konva';
 import { useBoard, useDocVersion } from '../doc/context';
+import { useTheme } from '../state/theme';
 import { useUI } from '../state/ui';
+import { canvasColors } from './colors';
 import { useViewport } from '../state/viewport';
 import { GRID_SIZE, Interactions } from './interactions';
 import { OverlayLayer } from './Overlay';
@@ -13,11 +15,13 @@ import { TextEditor } from './TextEditor';
 const LOW_DETAIL_ZOOM = 0.25;
 
 /** Dotted grid as a CSS background: costs nothing per frame. Spacing coarsens when zoomed out. */
-function gridStyle(x: number, y: number, zoom: number): React.CSSProperties {
+function gridStyle(x: number, y: number, zoom: number, dark: boolean): React.CSSProperties {
   let size = GRID_SIZE * zoom;
   while (size < 12) size *= 5;
+  const colors = canvasColors(dark);
   return {
-    backgroundImage: 'radial-gradient(circle, #c9cbd1 1px, transparent 1.2px)',
+    backgroundColor: colors.background,
+    backgroundImage: `radial-gradient(circle, ${colors.grid} 1px, transparent 1.2px)`,
     backgroundSize: `${size}px ${size}px`,
     backgroundPosition: `${x - size / 2}px ${y - size / 2}px`,
   };
@@ -43,6 +47,7 @@ export function BoardCanvas({ onInteractions }: { onInteractions: (i: Interactio
   const selectedIds = useUI((s) => s.selectedIds);
   const editingId = useUI((s) => s.editingId);
   const cursor = useCursor();
+  const dark = useTheme((s) => s.dark);
   const lowDetail = camera.zoom < LOW_DETAIL_ZOOM;
 
   useEffect(() => {
@@ -87,7 +92,7 @@ export function BoardCanvas({ onInteractions }: { onInteractions: (i: Interactio
     <div
       ref={containerRef}
       className="absolute inset-0 touch-none select-none overflow-hidden"
-      style={{ ...gridStyle(camera.x, camera.y, camera.zoom), cursor }}
+      style={{ ...gridStyle(camera.x, camera.y, camera.zoom, dark), cursor }}
       data-testid="board-canvas"
     >
       {width > 0 && (
@@ -103,9 +108,17 @@ export function BoardCanvas({ onInteractions }: { onInteractions: (i: Interactio
           <Layer listening={false}>
             {visible.map((o) => {
               if (o.type !== 'connector')
-                return <ObjectNode key={o.id} o={o} editing={o.id === editingId} lowDetail={lowDetail} />;
+                return (
+                  <ObjectNode
+                    key={o.id}
+                    o={o}
+                    editing={o.id === editingId}
+                    lowDetail={lowDetail}
+                    dark={dark}
+                  />
+                );
               const r = board.store.resolve(o);
-              return r ? <ConnectorNode key={o.id} o={o} points={r.points} /> : null;
+              return r ? <ConnectorNode key={o.id} o={o} points={r.points} dark={dark} /> : null;
             })}
           </Layer>
           <OverlayLayer stage={stage} />

@@ -12,6 +12,13 @@ export function compareZ(a: Ordered, b: Ordered): number {
   return 0;
 }
 
+/** Rendering/hit order: frames always sit beneath everything else, then z order. */
+export function comparePaint(a: Ordered & { type: string }, b: Ordered & { type: string }): number {
+  const fa = a.type === 'frame' ? 0 : 1;
+  const fb = b.type === 'frame' ? 0 : 1;
+  return fa !== fb ? fa - fb : compareZ(a, b);
+}
+
 export function keyAbove(top: string | null): string {
   return generateKeyBetween(top, null);
 }

@@ -3,7 +3,7 @@ import { api } from '../lib/api';
 import { authClient } from '../lib/auth';
 
 const input =
-  'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
+  'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-indigo-500/30';
 
 export function AuthPage() {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
@@ -35,8 +35,8 @@ export function AuthPage() {
   };
 
   return (
-    <div className="flex min-h-full items-center justify-center bg-gray-50 p-4">
-      <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
+    <div className="flex min-h-full items-center justify-center bg-gray-50 p-4 dark:bg-zinc-950">
+      <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-8 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
         <div className="mb-6 flex items-center gap-2">
           <div className="h-6 w-6 rounded-md bg-indigo-600" />
           <span className="text-lg font-semibold tracking-tight">Canvasly</span>
@@ -44,7 +44,7 @@ export function AuthPage() {
         <h1 className="mb-1 text-xl font-semibold">
           {mode === 'signin' ? 'Welcome back' : 'Create your account'}
         </h1>
-        <p className="mb-6 text-sm text-gray-500">
+        <p className="mb-6 text-sm text-gray-500 dark:text-zinc-400">
           {mode === 'signin' ? 'Sign in to your boards.' : 'Start collaborating on infinite boards.'}
         </p>
 
@@ -53,7 +53,7 @@ export function AuthPage() {
             <button
               type="button"
               onClick={() => authClient.signIn.social({ provider: 'google', callbackURL: location.pathname })}
-              className="mb-4 flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 py-2 text-sm font-medium hover:bg-gray-50"
+              className="mb-4 flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 py-2 text-sm font-medium hover:bg-gray-50 dark:border-zinc-600 dark:hover:bg-zinc-800"
             >
               <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden>
                 <path
@@ -122,7 +122,7 @@ export function AuthPage() {
           </button>
         </form>
 
-        <p className="mt-5 text-center text-sm text-gray-500">
+        <p className="mt-5 text-center text-sm text-gray-500 dark:text-zinc-400">
           {mode === 'signin' ? "Don't have an account? " : 'Already have an account? '}
           <button
             type="button"

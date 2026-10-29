@@ -1,4 +1,11 @@
-import { STICKY_COLORS, type ConnectorEnd, type Guide, type Rect, type ShapeKind } from '@canvasly/shared';
+import {
+  STICKY_COLORS,
+  type ConnectorEnd,
+  type Guide,
+  type Rect,
+  type ShapeKind,
+  type Vec,
+} from '@canvasly/shared';
 import { create } from 'zustand';
 
 export type Tool =
@@ -12,11 +19,13 @@ export type Tool =
   | 'line'
   | 'arrow'
   | 'pen'
-  | 'eraser';
+  | 'eraser'
+  | 'frame'
+  | 'comment';
 
 /** In-progress creation previews, drawn in the overlay layer until the gesture commits. */
 export type Draft =
-  | { kind: 'shape'; shape: ShapeKind; rect: Rect }
+  | { kind: 'shape'; shape: ShapeKind | 'frame'; rect: Rect }
   | { kind: 'pen'; points: number[] }
   | { kind: 'connector'; start: ConnectorEnd; end: ConnectorEnd; arrow: boolean }
   | { kind: 'eraser'; x: number; y: number; r: number };
@@ -35,6 +44,16 @@ interface UIState {
   guides: Guide[];
   marquee: Rect | null;
   draft: Draft | null;
+  /** Viewer role: editing tools are hidden and local edits refused. */
+  readOnly: boolean;
+  /** World position of a comment being composed (comment tool click), or null. */
+  commentDraft: Vec | null;
+  openThreadId: string | null;
+  commentsPanel: boolean;
+  showResolved: boolean;
+  framesPanel: boolean;
+  /** Index into the frames list while presenting, or null. */
+  presenting: number | null;
   /** Awareness client id whose viewport we mirror ("follow user"), or null. */
   followingClientId: number | null;
   stickyColor: string;
@@ -53,6 +72,13 @@ interface UIState {
   setMarquee: (r: Rect | null) => void;
   setDraft: (d: Draft | null) => void;
   setFollowing: (clientId: number | null) => void;
+  setReadOnly: (v: boolean) => void;
+  setCommentDraft: (p: Vec | null) => void;
+  setOpenThread: (id: string | null) => void;
+  toggleCommentsPanel: () => void;
+  setShowResolved: (v: boolean) => void;
+  toggleFramesPanel: () => void;
+  setPresenting: (i: number | null) => void;
   setStickyColor: (c: string) => void;
   setPenColor: (c: string) => void;
   setPenSize: (s: number) => void;
@@ -73,6 +99,13 @@ export const useUI = create<UIState>()((set, get) => ({
   marquee: null,
   draft: null,
   followingClientId: null,
+  readOnly: false,
+  commentDraft: null,
+  openThreadId: null,
+  commentsPanel: false,
+  showResolved: false,
+  framesPanel: false,
+  presenting: null,
   stickyColor: STICKY_COLORS[0],
   penColor: '#1a1a1a',
   penSize: 4,
@@ -95,6 +128,14 @@ export const useUI = create<UIState>()((set, get) => ({
   setMarquee: (marquee) => set({ marquee }),
   setDraft: (draft) => set({ draft }),
   setFollowing: (followingClientId) => set({ followingClientId }),
+  setReadOnly: (readOnly) =>
+    set(readOnly ? { readOnly, editingId: null, tool: 'select', draft: null } : { readOnly }),
+  setCommentDraft: (commentDraft) => set({ commentDraft, openThreadId: null }),
+  setOpenThread: (openThreadId) => set({ openThreadId, commentDraft: null }),
+  toggleCommentsPanel: () => set((s) => ({ commentsPanel: !s.commentsPanel, framesPanel: false })),
+  setShowResolved: (showResolved) => set({ showResolved }),
+  toggleFramesPanel: () => set((s) => ({ framesPanel: !s.framesPanel, commentsPanel: false })),
+  setPresenting: (presenting) => set({ presenting, selectedIds: [], editingId: null }),
   setStickyColor: (stickyColor) => set({ stickyColor }),
   setPenColor: (penColor) => set({ penColor }),
   setPenSize: (penSize) => set({ penSize }),

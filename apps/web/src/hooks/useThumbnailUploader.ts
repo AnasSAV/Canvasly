@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { renderThumbnail } from '../canvas/thumbnail';
+import { renderThumbnail } from '../canvas/renderer2d';
+import { contentBounds } from '../doc/ops';
 import { LOCAL_ORIGIN, type Board } from '../doc/board';
 
 /** While editing, refresh the dashboard preview at most this often. */
@@ -18,7 +19,7 @@ export function useThumbnailUploader(board: Board, enabled: boolean): () => Prom
     if (!enabled || !dirty.current) return inflight.current ?? undefined;
     dirty.current = false;
     const run = (async () => {
-      const blob = await renderThumbnail(board.store, board.id);
+      const blob = await renderThumbnail(board.store, board.assetBase, contentBounds(board.store));
       if (!blob) return;
       await fetch(`/api/boards/${board.id}/thumbnail`, {
         method: 'PUT',

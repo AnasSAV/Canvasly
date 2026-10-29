@@ -14,6 +14,7 @@
     "@canvasly/shared": "workspace:*",
     "better-auth": "^1.7.14",
     "idb-keyval": "^6.3.0",
+    "jspdf": "^4.2.1",
     "konva": "^10.9.0",
     "lib0": "^0.2.119",
     "lucide-react": "^1.63.0",

@@ -55,7 +55,10 @@ function ColorPicker({
   const [open, setOpen] = useState(false);
   return (
     <div className="relative">
-      <div title={label} className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-gray-100">
+      <div
+        title={label}
+        className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800"
+      >
         <Swatch color={value ?? '#ffffff'} onClick={() => setOpen((o) => !o)} />
       </div>
       {open && (
@@ -77,7 +80,7 @@ function ColorPicker({
   );
 }
 
-const Divider = () => <div className="mx-0.5 h-6 w-px bg-gray-200" />;
+const Divider = () => <div className="mx-0.5 h-6 w-px bg-gray-200 dark:bg-zinc-700" />;
 
 /** Style controls that apply to every selected object of the relevant type. */
 function StyleControls({ objs, ids }: { objs: BoardObject[]; ids: string[] }) {
@@ -167,6 +170,32 @@ function StyleControls({ objs, ids }: { objs: BoardObject[]; ids: string[] }) {
       />,
     );
   }
+  if (only('frame') && first?.type === 'frame' && objs.length === 1) {
+    controls.push(
+      <input
+        key={`name-${first.id}`}
+        defaultValue={first.name}
+        aria-label="Frame name"
+        maxLength={80}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === 'Enter') e.currentTarget.blur();
+        }}
+        onBlur={(e) => {
+          const name = e.currentTarget.value.trim();
+          if (name && name !== first.name) updateEach(board, ids, () => ({ name }));
+        }}
+        className="mx-1 w-36 rounded-md border border-gray-300 px-2 py-1 text-sm outline-none focus:border-indigo-500 dark:border-zinc-600 dark:bg-zinc-800"
+      />,
+      <ColorPicker
+        key="frame-fill"
+        label="Frame background"
+        value={first.fill}
+        colors={FILL_COLORS}
+        onPick={(fill) => updateEach(board, ids, (o) => (o.type === 'frame' ? { fill } : null))}
+      />,
+    );
+  }
   if (only('connector') && first?.type === 'connector') {
     const conn = (fn: (c: ConnectorObject) => Partial<ConnectorObject>) =>
       updateEach(board, ids, (o) => (o.type === 'connector' ? fn(o) : null));
@@ -219,12 +248,13 @@ export function SelectionToolbar({ actions }: { actions: Actions }) {
   const selectedIds = useUI((s) => s.selectedIds);
   const interacting = useUI((s) => s.interacting);
   const editingId = useUI((s) => s.editingId);
+  const readOnly = useUI((s) => s.readOnly);
   const camera = useViewport((s) => s.camera);
   const width = useViewport((s) => s.width);
 
   const objs = selectedIds.map((id) => board.store.get(id)).filter((o) => o !== undefined);
   const bounds = selectionBounds(board.store, selectedIds);
-  if (!objs.length || !bounds || interacting || editingId) return null;
+  if (!objs.length || !bounds || interacting || editingId || readOnly) return null;
 
   const top = worldToScreen(camera, { x: bounds.x + bounds.w / 2, y: bounds.y });
   const bottom = worldToScreen(camera, { x: 0, y: bounds.y + bounds.h }).y;

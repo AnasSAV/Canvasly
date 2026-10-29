@@ -1,6 +1,6 @@
-import { BoardPage } from './BoardPage';
+import { BoardPage, SharedLinkPage } from './BoardPage';
 import { authClient } from './lib/auth';
-import { matchBoard, usePathname } from './lib/router';
+import { matchBoard, matchShareLink, usePathname } from './lib/router';
 import { AuthPage } from './pages/AuthPage';
 import { DashboardPage } from './pages/DashboardPage';
 
@@ -8,8 +8,16 @@ export function App() {
   const { data: session, isPending } = authClient.useSession();
   const pathname = usePathname();
 
+  // Share links work signed out too (public view-only boards), so they're routed before the session gate.
+  const shareToken = matchShareLink(pathname);
+  if (shareToken) return <SharedLinkPage key={shareToken} token={shareToken} />;
+
   if (isPending) {
-    return <div className="flex h-full items-center justify-center text-sm text-gray-500">Loading…</div>;
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-gray-500 dark:bg-zinc-950">
+        Loading…
+      </div>
+    );
   }
   // Signing in keeps the URL, so deep links to a board work after login.
   if (!session) return <AuthPage />;

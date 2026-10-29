@@ -49,7 +49,8 @@ export async function compressImage(file: Blob): Promise<{ blob: Blob; width: nu
   throw new Error('Could not compress image under 1 MB');
 }
 
-export const assetUrl = (boardId: string, assetId: string) => `/api/boards/${boardId}/assets/${assetId}`;
+/** `base` is the board's API root: /api/boards/:id, or /api/public/:token for public links. */
+export const assetUrl = (base: string, assetId: string) => `${base}/assets/${assetId}`;
 
 export async function uploadAsset(boardId: string, blob: Blob): Promise<string> {
   const res = await fetch(`/api/boards/${boardId}/assets`, {
@@ -65,7 +66,7 @@ export async function uploadAsset(boardId: string, blob: Blob): Promise<string> 
 const images = new Map<string, Promise<HTMLImageElement | null>>();
 const loaded = new Map<string, HTMLImageElement>();
 
-function loadImage(url: string): Promise<HTMLImageElement | null> {
+export function loadImage(url: string): Promise<HTMLImageElement | null> {
   let p = images.get(url);
   if (!p) {
     const img = new Image();
@@ -88,8 +89,8 @@ function loadImage(url: string): Promise<HTMLImageElement | null> {
 /** Already-decoded image for synchronous drawing (thumbnails), or null. */
 export const getLoadedImage = (url: string) => loaded.get(url) ?? null;
 
-export function useAssetImage(boardId: string, assetId: string): HTMLImageElement | null {
-  const url = assetUrl(boardId, assetId);
+export function useAssetImage(base: string, assetId: string): HTMLImageElement | null {
+  const url = assetUrl(base, assetId);
   const [img, setImg] = useState<HTMLImageElement | null>(() => getLoadedImage(url));
   useEffect(() => {
     let alive = true;

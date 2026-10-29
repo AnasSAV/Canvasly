@@ -15,7 +15,11 @@ const TOOL_KEYS: Record<string, Tool> = {
   a: 'arrow',
   p: 'pen',
   e: 'eraser',
+  f: 'frame',
+  c: 'comment',
 };
+
+const VIEWER_TOOLS = new Set<Tool>(['select', 'hand', 'comment']);
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 
@@ -25,6 +29,7 @@ export function useShortcuts(actions: Actions, openImagePicker: () => void) {
     const onKeyDown = (e: KeyboardEvent) => {
       if (isEditableTarget(e)) return;
       const ui = useUI.getState();
+      if (ui.presenting !== null) return; // presentation mode has its own keys
       const vp = useViewport.getState();
       const mod = isMac ? e.metaKey : e.ctrlKey;
       const key = e.key.toLowerCase();
@@ -70,7 +75,7 @@ export function useShortcuts(actions: Actions, openImagePicker: () => void) {
         case '[':
           return actions.sendToBack();
         case 'Enter': {
-          if (ui.selectedIds.length === 1) {
+          if (ui.selectedIds.length === 1 && !ui.readOnly) {
             e.preventDefault();
             ui.setEditing(ui.selectedIds[0]!);
           }
@@ -88,9 +93,9 @@ export function useShortcuts(actions: Actions, openImagePicker: () => void) {
           return actions.nudge(dx, dy);
         }
       }
-      if (!e.shiftKey && key === 'i') return openImagePicker();
+      if (!e.shiftKey && key === 'i' && !ui.readOnly) return openImagePicker();
       const tool = !e.shiftKey ? TOOL_KEYS[key] : undefined;
-      if (tool) ui.setTool(tool);
+      if (tool && (!ui.readOnly || VIEWER_TOOLS.has(tool))) ui.setTool(tool);
     };
 
     const onKeyUp = (e: KeyboardEvent) => {

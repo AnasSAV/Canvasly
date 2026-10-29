@@ -1,6 +1,7 @@
 import type {
   BoardObject,
   ConnectorObject,
+  FrameObject,
   ImageObject,
   PenObject,
   ShapeObject,
@@ -11,6 +12,8 @@ import { memo, useMemo } from 'react';
 import { Arrow, Ellipse, Group, Image as KImage, Line, Path, Rect, Text } from 'react-konva';
 import { useAssetImage } from '../doc/assets';
 import { useBoard } from '../doc/context';
+import { useViewport } from '../state/viewport';
+import { canvasColors, ink, paper } from './colors';
 import { freehandPath } from './freehand';
 import { FONT_FAMILY, LINE_HEIGHT, SHAPE_PADDING, STICKY_PADDING, autoFontSize } from './text';
 
@@ -23,6 +26,7 @@ interface DetailProps {
   editing: boolean;
   /** Zoomed far out: skip text and shadows, which are unreadable and the most expensive to draw. */
   lowDetail: boolean;
+  dark: boolean;
 }
 
 const Sticky = ({ o, editing, lowDetail }: { o: StickyObject } & DetailProps) => {
@@ -63,7 +67,7 @@ const Sticky = ({ o, editing, lowDetail }: { o: StickyObject } & DetailProps) =>
   );
 };
 
-const TextNode = ({ o, editing }: { o: TextObject; editing: boolean }) => (
+const TextNode = ({ o, editing, dark }: { o: TextObject } & DetailProps) => (
   <Group {...boxGroupProps(o)}>
     {/* Invisible box keeps the group's client rect stable for the Transformer. */}
     <Rect width={o.w} height={o.h} fill="transparent" />
@@ -74,7 +78,7 @@ const TextNode = ({ o, editing }: { o: TextObject; editing: boolean }) => (
         fontSize={o.fontSize}
         fontFamily={FONT_FAMILY}
         lineHeight={LINE_HEIGHT}
-        fill={o.color}
+        fill={ink(o.color, dark)}
         align={o.align}
         wrap="word"
         perfectDrawEnabled={false}
@@ -83,9 +87,9 @@ const TextNode = ({ o, editing }: { o: TextObject; editing: boolean }) => (
   </Group>
 );
 
-const Shape = ({ o, editing, lowDetail }: { o: ShapeObject } & DetailProps) => {
-  const fill = o.fill === 'transparent' ? undefined : o.fill;
-  const stroke = o.stroke === 'transparent' ? undefined : o.stroke;
+const Shape = ({ o, editing, lowDetail, dark }: { o: ShapeObject } & DetailProps) => {
+  const fill = o.fill === 'transparent' ? undefined : paper(o.fill, dark);
+  const stroke = o.stroke === 'transparent' ? undefined : ink(o.stroke, dark);
   const common = {
     fill,
     stroke,
@@ -95,6 +99,9 @@ const Shape = ({ o, editing, lowDetail }: { o: ShapeObject } & DetailProps) => {
   };
   const showText = !editing && !lowDetail && o.text;
   const fontSize = showText ? autoFontSize(o.text, o.w, o.h, SHAPE_PADDING) : 0;
+  // Text on a light custom fill stays dark; on the default (or transparent) fill it follows the theme.
+  const textColor =
+    o.fill === 'transparent' || o.fill.toLowerCase() === '#ffffff' ? ink(o.textColor, dark) : o.textColor;
   return (
     <Group {...boxGroupProps(o)}>
       {o.type === 'rect' && <Rect width={o.w} height={o.h} cornerRadius={4} {...common} />}
@@ -114,7 +121,7 @@ const Shape = ({ o, editing, lowDetail }: { o: ShapeObject } & DetailProps) => {
           fontSize={Math.min(fontSize, 28)}
           fontFamily={FONT_FAMILY}
           lineHeight={LINE_HEIGHT}
-          fill={o.textColor}
+          fill={textColor}
           align="center"
           verticalAlign="middle"
           wrap="word"
@@ -125,18 +132,18 @@ const Shape = ({ o, editing, lowDetail }: { o: ShapeObject } & DetailProps) => {
   );
 };
 
-const Pen = ({ o }: { o: PenObject }) => {
+const Pen = ({ o, dark }: { o: PenObject } & DetailProps) => {
   const data = useMemo(() => freehandPath(o.points, o.size), [o.points, o.size]);
   return (
     <Group {...boxGroupProps(o)}>
       <Rect width={o.w} height={o.h} fill="transparent" />
-      <Path data={data} fill={o.stroke} perfectDrawEnabled={false} />
+      <Path data={data} fill={ink(o.stroke, dark)} perfectDrawEnabled={false} />
     </Group>
   );
 };
 
 const ImageNode = ({ o }: { o: ImageObject }) => {
-  const img = useAssetImage(useBoard().id, o.assetId);
+  const img = useAssetImage(useBoard().assetBase, o.assetId);
   return (
     <Group {...boxGroupProps(o)}>
       {img ? (
@@ -155,22 +162,65 @@ const ImageNode = ({ o }: { o: ImageObject }) => {
   );
 };
 
+/**
+ * Frame background + border. The title is a sibling (not inside the group) so it doesn't count toward
+ * the Transformer's box, and it keeps a constant on-screen size whatever the zoom.
+ */
+const Frame = ({ o, dark }: { o: FrameObject } & DetailProps) => {
+  const zoom = useViewport((s) => s.camera.zoom);
+  const colors = canvasColors(dark);
+  const fs = 13 / zoom;
+  return (
+    <>
+      <Text
+        x={o.x}
+        y={o.y - fs * 1.6}
+        rotation={o.rotation}
+        width={Math.max(o.w, 1)}
+        text={o.name || 'Frame'}
+        fontSize={fs}
+        fontFamily={FONT_FAMILY}
+        fontStyle="500"
+        fill={colors.frameTitle}
+        wrap="none"
+        ellipsis
+        listening={false}
+        perfectDrawEnabled={false}
+      />
+      <Group {...boxGroupProps(o)}>
+        <Rect
+          width={o.w}
+          height={o.h}
+          fill={o.fill === 'transparent' ? undefined : paper(o.fill, dark)}
+          stroke={colors.frameBorder}
+          strokeWidth={1}
+          strokeScaleEnabled={false}
+          perfectDrawEnabled={false}
+        />
+      </Group>
+    </>
+  );
+};
+
 const samePoints = (a: number[], b: number[]) => a.length === b.length && a.every((v, i) => v === b[i]);
 
 export const ConnectorNode = memo(
   function ConnectorNode({
     o,
     points,
+    dark = false,
   }: {
     o: Pick<ConnectorObject, 'id' | 'stroke' | 'strokeWidth' | 'startCap' | 'endCap'>;
     points: number[];
+    dark?: boolean;
   }) {
+    const color = ink(o.stroke, dark);
     const props = {
       id: o.id,
       name: 'object',
       points,
-      stroke: o.stroke,
-      fill: o.stroke,
+      stroke: color,
+      fill: color,
       strokeWidth: o.strokeWidth,
       lineCap: 'round' as const,
       lineJoin: 'round' as const,
@@ -188,27 +238,28 @@ export const ConnectorNode = memo(
       />
     );
   },
-  (a, b) => a.o === b.o && samePoints(a.points, b.points),
+  (a, b) => a.o === b.o && a.dark === b.dark && samePoints(a.points, b.points),
 );
 
 /** Renders any non-connector object. Memoized on object identity, which DocStore preserves when unchanged. */
-export const ObjectNode = memo(function ObjectNode({
-  o,
-  editing,
-  lowDetail,
-}: { o: Exclude<BoardObject, ConnectorObject> } & DetailProps) {
+export const ObjectNode = memo(function ObjectNode(
+  props: { o: Exclude<BoardObject, ConnectorObject> } & DetailProps,
+) {
+  const { o } = props;
   switch (o.type) {
     case 'sticky':
-      return <Sticky o={o} editing={editing} lowDetail={lowDetail} />;
+      return <Sticky {...props} o={o} />;
     case 'text':
-      return <TextNode o={o} editing={editing} />;
+      return <TextNode {...props} o={o} />;
     case 'rect':
     case 'ellipse':
     case 'triangle':
-      return <Shape o={o} editing={editing} lowDetail={lowDetail} />;
+      return <Shape {...props} o={o} />;
     case 'pen':
-      return <Pen o={o} />;
+      return <Pen {...props} o={o} />;
     case 'image':
       return <ImageNode o={o} />;
+    case 'frame':
+      return <Frame {...props} o={o} />;
   }
 });

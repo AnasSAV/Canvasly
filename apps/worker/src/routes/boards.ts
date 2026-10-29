@@ -1,9 +1,11 @@
 import {
   ASSET_MIME_TYPES,
+  BoardObject,
   CreateBoardBody,
   MAX_ASSET_BYTES,
   MAX_THUMBNAIL_BYTES,
   RenameBoardBody,
+  buildTemplate,
   can,
   newId,
   type BoardList,
@@ -12,6 +14,7 @@ import {
 import { Hono } from 'hono';
 import { TRUSTED_HEADERS } from '../board-room/BoardRoom';
 import { boardRoom, fail, loadAccess, type AppEnv, type BoardAccess } from '../http';
+import { shareRoutes } from './share';
 
 const IMMUTABLE = 'private, max-age=31536000, immutable';
 const THUMBNAIL_TYPES = ['image/webp', 'image/png', 'image/jpeg'];
@@ -49,6 +52,10 @@ boards.post('/', async (c) => {
       'INSERT INTO board_members (board_id, user_id, role, created_at) VALUES (?, ?, ?, ?)',
     ).bind(id, user.id, 'owner', now),
   ]);
+  if (body.data.template !== 'blank') {
+    const objects = buildTemplate(body.data.template).map((o) => BoardObject.parse(o));
+    await boardRoom(c.env, id).seed(objects);
+  }
   const board: BoardSummary = {
     id,
     title: body.data.title,
@@ -155,5 +162,7 @@ withAccess.get('/ws', async (c) => {
   headers.set(TRUSTED_HEADERS.role, access.role);
   return boardRoom(c.env, access.id).fetch(new Request(c.req.raw, { headers }));
 });
+
+shareRoutes(withAccess);
 
 boards.route('/:id', withAccess);

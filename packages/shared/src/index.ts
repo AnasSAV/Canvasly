@@ -1,5 +1,8 @@
 export * from './schemas/objects';
 export * from './schemas/api';
+export * from './schemas/comments';
+export * from './schemas/share';
+export * from './schemas/export';
 export * from './permissions';
 export * from './protocol';
 export * from './presence';
@@ -13,3 +16,4 @@ export * from './model/doc';
 export * from './model/zorder';
 export * from './model/clipboard';
 export * from './model/factories';
+export * from './model/templates';

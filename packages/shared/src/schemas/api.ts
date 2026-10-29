@@ -1,9 +1,13 @@
 import { z } from 'zod';
+import { TemplateId } from '../model/templates';
 import { Role } from '../permissions';
 
 export const BoardTitle = z.string().trim().min(1).max(120);
 
-export const CreateBoardBody = z.object({ title: BoardTitle.default('Untitled board') });
+export const CreateBoardBody = z.object({
+  title: BoardTitle.default('Untitled board'),
+  template: TemplateId.default('blank'),
+});
 export type CreateBoardBody = z.infer<typeof CreateBoardBody>;
 
 export const RenameBoardBody = z.object({ title: BoardTitle });
