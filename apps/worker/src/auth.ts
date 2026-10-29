@@ -4,7 +4,14 @@ import { hashPassword, verifyPassword } from './password';
 function createAuth(env: Env) {
   const google =
     env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
-      ? { google: { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET } }
+      ? {
+          google: {
+            clientId: env.GOOGLE_CLIENT_ID,
+            clientSecret: env.GOOGLE_CLIENT_SECRET,
+            // Let people with several Google accounts pick one instead of silently reusing the last.
+            prompt: 'select_account' as const,
+          },
+        }
       : undefined;
   return betterAuth({
     database: env.DB,

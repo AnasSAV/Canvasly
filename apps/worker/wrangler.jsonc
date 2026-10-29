@@ -6,6 +6,15 @@
   // Better Auth uses AsyncLocalStorage and a few node: built-ins.
   "compatibility_flags": ["nodejs_compat"],
 
+  // Served only on the custom domain (the zone is on Cloudflare, which creates the DNS record and TLS
+  // certificate on deploy). One canonical origin keeps auth cookies and same-origin checks simple.
+  "routes": [{ "pattern": "canvasly.anas-hussaindeen.com", "custom_domain": true }],
+  "workers_dev": false,
+  "preview_urls": false,
+
+  // Public origin used by Better Auth and the same-origin guard. .dev.vars overrides it locally.
+  "vars": { "BETTER_AUTH_URL": "https://canvasly.anas-hussaindeen.com" },
+
   // The SPA is served as static assets (free, not counted as Worker requests). Only /api/* runs the Worker.
   "assets": {
     "directory": "../web/dist",
@@ -17,8 +26,8 @@
     {
       "binding": "DB",
       "database_name": "canvasly",
-      // Replace with the id printed by `wrangler d1 create canvasly` (see README). Local dev ignores it.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      // From `wrangler d1 create canvasly`. Local dev uses a local SQLite copy instead.
+      "database_id": "36cd1fe1-1d19-463f-ad89-aab85ea1ecc4",
       "migrations_dir": "migrations",
     },
   ],

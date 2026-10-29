@@ -5,12 +5,26 @@ import { authClient } from '../lib/auth';
 const input =
   'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-indigo-500/30';
 
+/** Messages for errors Better Auth reports back on the redirect after Google sign-in (`?error=`). */
+const OAUTH_ERRORS: Record<string, string> = {
+  account_not_linked:
+    'An account with this email already exists. Sign in with your password instead — Google can be used once that email is verified.',
+  access_denied: 'Google sign-in was cancelled.',
+};
+
+function oauthErrorFromUrl(): string | null {
+  const code = new URLSearchParams(location.search).get('error');
+  if (!code) return null;
+  history.replaceState(null, '', location.pathname); // don't show it again on refresh
+  return OAUTH_ERRORS[code] ?? 'Google sign-in failed. Please try again.';
+}
+
 export function AuthPage() {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(oauthErrorFromUrl);
   const [busy, setBusy] = useState(false);
   const [google, setGoogle] = useState(false);
 
@@ -52,7 +66,14 @@ export function AuthPage() {
           <>
             <button
               type="button"
-              onClick={() => authClient.signIn.social({ provider: 'google', callbackURL: location.pathname })}
+              onClick={() =>
+                authClient.signIn.social({
+                  provider: 'google',
+                  callbackURL: location.pathname,
+                  // Failures come back to this page (not Better Auth's bare error page) with ?error=
+                  errorCallbackURL: location.pathname,
+                })
+              }
               className="mb-4 flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 py-2 text-sm font-medium hover:bg-gray-50 dark:border-zinc-600 dark:hover:bg-zinc-800"
             >
               <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden>

@@ -169,9 +169,12 @@ when both are set.
 
 Everything below is free and needs no payment method.
 
-1. Create a Cloudflare account and note your workers.dev subdomain (Workers & Pages → Overview).
-   The app will live at `https://canvasly.<subdomain>.workers.dev`.
-2. Log in: `pnpm --filter @canvasly/worker exec wrangler login`
+1. The app is served at **https://canvasly.anas-hussaindeen.com** (`routes` in
+   [`wrangler.jsonc`](apps/worker/wrangler.jsonc), `custom_domain: true`). The domain's DNS is on Cloudflare,
+   so `wrangler deploy` creates the DNS record and TLS certificate automatically; the `workers.dev` URL is
+   disabled so there's a single origin. To use another (sub)domain, change the route pattern and
+   `vars.BETTER_AUTH_URL` — the zone must be on the same Cloudflare account.
+2. Log in (with the account that owns the domain): `pnpm --filter @canvasly/worker exec wrangler login`
 3. Create the D1 database and copy the printed `database_id` into
    [`apps/worker/wrangler.jsonc`](apps/worker/wrangler.jsonc):
    ```sh
@@ -182,8 +185,8 @@ Everything below is free and needs no payment method.
    ```sh
    cd apps/worker
    pnpm exec wrangler secret put BETTER_AUTH_SECRET     # e.g. output of: openssl rand -base64 32
-   pnpm exec wrangler secret put BETTER_AUTH_URL        # https://canvasly.<subdomain>.workers.dev
    pnpm exec wrangler secret put GOOGLE_CLIENT_ID       # optional
+   # Google redirect URI: https://canvasly.anas-hussaindeen.com/api/auth/callback/google
    pnpm exec wrangler secret put GOOGLE_CLIENT_SECRET   # optional
    ```
 
