@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import type * as ViewportModule from '../src/state/viewport';
+import { createBoard, openBoard, signUp } from './helpers';
 
 const objects = (page: Page) =>
   page.evaluate(() => [...window.__canvasly!.store.all()].map((o) => ({ type: o.type, id: o.id })));
@@ -15,8 +16,8 @@ test.beforeEach(async ({ page }) => {
   page.on('console', (m) => {
     if (m.type() === 'error') errors.push(m.text());
   });
-  await page.goto('/');
-  await expect(page.getByTestId('board-canvas')).toBeVisible();
+  await signUp(page.request);
+  await openBoard(page, await createBoard(page.request));
 });
 
 test.afterEach(() => {

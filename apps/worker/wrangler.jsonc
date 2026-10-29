@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "canvasly",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  // Better Auth uses AsyncLocalStorage and a few node: built-ins.
+  "compatibility_flags": ["nodejs_compat"],
+
+  // The SPA is served as static assets (free, not counted as Worker requests). Only /api/* runs the Worker.
+  "assets": {
+    "directory": "../web/dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"],
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "canvasly",
+      // Replace with the id printed by `wrangler d1 create canvasly` (see README). Local dev ignores it.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations",
+    },
+  ],
+
+  // One Durable Object per board. The Free plan only supports SQLite-backed Durable Objects.
+  "durable_objects": {
+    "bindings": [{ "name": "BOARD_ROOM", "class_name": "BoardRoom" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["BoardRoom"] }],
+
+  "observability": { "enabled": true },
+}

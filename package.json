@@ -7,17 +7,21 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "pnpm --filter @canvasly/web dev",
+    "dev": "concurrently -k -n worker,web -c blue,magenta \"pnpm --filter @canvasly/worker dev\" \"pnpm --filter @canvasly/web dev\"",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "cf:deploy": "pnpm --filter @canvasly/web build && pnpm --filter @canvasly/worker exec wrangler deploy",
+    "db:migrate:local": "pnpm --filter @canvasly/worker db:migrate:local",
+    "db:migrate:remote": "pnpm --filter @canvasly/worker db:migrate:remote"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "concurrently": "^10.0.6",
     "eslint": "^10.13.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react-hooks": "^7.1.1",

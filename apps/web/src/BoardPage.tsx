@@ -1,4 +1,4 @@
-import { screenToWorld } from '@canvasly/shared';
+import { can, screenToWorld, type BoardSummary } from '@canvasly/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BoardCanvas } from './canvas/BoardCanvas';
 import type { Interactions } from './canvas/interactions';
@@ -9,6 +9,9 @@ import { Board } from './doc/board';
 import { BoardContext } from './doc/context';
 import { contentBounds } from './doc/ops';
 import { useShortcuts } from './hooks/useShortcuts';
+import { useThumbnailUploader } from './hooks/useThumbnailUploader';
+import { ApiError, api, boardSocketUrl } from './lib/api';
+import { Link } from './lib/router';
 import { useUI } from './state/ui';
 import { useViewport } from './state/viewport';
 import { SelectionToolbar } from './ui/SelectionToolbar';
@@ -16,10 +19,11 @@ import { Toolbar } from './ui/Toolbar';
 import { TopBar } from './ui/TopBar';
 import { ZoomControls } from './ui/ZoomControls';
 
-function useBoardInstance(boardId: string): Board | null {
+function useBoardInstance(boardId: string | null): Board | null {
   const [board, setBoard] = useState<Board | null>(null);
   useEffect(() => {
-    const b = new Board(boardId);
+    if (!boardId) return;
+    const b = new Board(boardId, boardSocketUrl(boardId));
     let alive = true;
     void b.ready.then(() => alive && setBoard(b));
     return () => {
@@ -31,21 +35,58 @@ function useBoardInstance(boardId: string): Board | null {
   return board;
 }
 
+function Centered({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-gray-500">
+      {children}
+    </div>
+  );
+}
+
 export function BoardPage({ boardId }: { boardId: string }) {
-  const board = useBoardInstance(boardId);
-  if (!board) {
+  const [meta, setMeta] = useState<BoardSummary | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    api
+      .getBoard(boardId)
+      .then(setMeta)
+      .catch((e: Error) =>
+        setError(
+          e instanceof ApiError && e.status === 404
+            ? "This board doesn't exist or you don't have access to it."
+            : e.message,
+        ),
+      );
+  }, [boardId]);
+  const board = useBoardInstance(meta ? boardId : null);
+
+  if (error) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-gray-500">Loading board…</div>
+      <Centered>
+        <p>{error}</p>
+        <Link to="/" className="font-medium text-indigo-600 hover:underline">
+          Back to your boards
+        </Link>
+      </Centered>
     );
   }
+  if (!board || !meta) return <Centered>Loading board…</Centered>;
   return (
     <BoardContext value={board}>
-      <BoardView board={board} />
+      <BoardView board={board} meta={meta} onMetaChange={setMeta} />
     </BoardContext>
   );
 }
 
-function BoardView({ board }: { board: Board }) {
+function BoardView({
+  board,
+  meta,
+  onMetaChange,
+}: {
+  board: Board;
+  meta: BoardSummary;
+  onMetaChange: (m: BoardSummary) => void;
+}) {
   const interactionsRef = useRef<Interactions | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const onInteractions = useCallback((i: Interactions | null) => {
@@ -57,6 +98,12 @@ function BoardView({ board }: { board: Board }) {
   );
   const openImagePicker = useCallback(() => fileRef.current?.click(), []);
   useShortcuts(actions, openImagePicker);
+  const flushThumbnail = useThumbnailUploader(board, can(meta.role, 'edit'));
+
+  // UI state is global; start each board with a clean slate.
+  useEffect(() => {
+    useUI.setState({ selectedIds: [], editingId: null, tool: 'select', draft: null });
+  }, [board]);
 
   useEffect(() => {
     exposeForDebugging(board);
@@ -103,7 +150,13 @@ function BoardView({ board }: { board: Board }) {
       }}
     >
       <BoardCanvas onInteractions={onInteractions} />
-      <TopBar board={board} actions={actions} />
+      <TopBar
+        board={board}
+        actions={actions}
+        meta={meta}
+        onMetaChange={onMetaChange}
+        beforeLeave={flushThumbnail}
+      />
       <Toolbar onImage={openImagePicker} />
       <SelectionToolbar actions={actions} />
       <ZoomControls onFit={actions.zoomToFit} />

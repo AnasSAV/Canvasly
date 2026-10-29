@@ -1,0 +1,92 @@
+import { expect, test } from '@playwright/test';
+import { createBoard, openBoard, signIn, signUp } from './helpers';
+
+test('dashboard: create, open, rename and delete a board', async ({ page }) => {
+  await signUp(page.request);
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Your boards' })).toBeVisible();
+  await page.getByTestId('new-board').first().click();
+  await expect(page).toHaveURL(/\/b\/[\w-]+$/);
+  await expect(page.getByTestId('connection-status')).toHaveAttribute('data-status', 'online');
+
+  // Rename from inside the board
+  await page.getByTestId('board-title').click();
+  await page.getByTestId('board-title-input').fill('Roadmap');
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('board-title')).toHaveText('Roadmap');
+
+  // Draw something so a thumbnail gets uploaded on the way out
+  await page.keyboard.press('n');
+  await page.getByTestId('board-canvas').click({ position: { x: 600, y: 400 } });
+  await page.keyboard.type('Thumbnail me');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Back to boards' }).click();
+
+  await expect(page).toHaveURL(/\/$/);
+  const card = page.getByTestId('board-card');
+  await expect(card).toHaveCount(1);
+  await expect(page.getByText('Roadmap')).toBeVisible();
+  await expect(card.locator('img')).toBeVisible();
+
+  page.once('dialog', (d) => void d.accept());
+  await page.getByRole('button', { name: 'Board options' }).click();
+  await page.getByRole('button', { name: 'Delete' }).click();
+  await expect(card).toHaveCount(0);
+  const res = await page.request.get('/api/boards');
+  expect(((await res.json()) as { boards: unknown[] }).boards).toHaveLength(0);
+});
+
+test('board content persists in the Durable Object across browsers', async ({ page, browser }) => {
+  const user = await signUp(page.request);
+  const boardId = await createBoard(page.request);
+  await openBoard(page, boardId);
+  await page.keyboard.press('r');
+  await page.getByTestId('board-canvas').click({ position: { x: 500, y: 400 } });
+  await page.mouse.dblclick(500, 400);
+  await page.keyboard.type('Persist me');
+  await page.keyboard.press('Escape');
+  // Let the 50 ms client batch go out; closing the page then disconnects the socket, which makes
+  // the Durable Object flush to SQLite immediately.
+  await page.waitForTimeout(300);
+  await page.close();
+
+  // Fresh context = empty IndexedDB, so the content can only come from the server.
+  const ctx = await browser.newContext();
+  const page2 = await ctx.newPage();
+  await signIn(page2.request, user);
+  await openBoard(page2, boardId);
+  await expect
+    .poll(() => page2.evaluate(() => [...window.__canvasly!.store.all()].map((o) => o.type)))
+    .toEqual(['rect']);
+  const text = await page2.evaluate(() => {
+    const [o] = [...window.__canvasly!.store.all()];
+    return o && 'text' in o ? o.text : null;
+  });
+  expect(text).toBe('Persist me');
+  await ctx.close();
+});
+
+test('another user cannot open a board they have no access to', async ({ page, browser }) => {
+  await signUp(page.request);
+  const boardId = await createBoard(page.request);
+  const ctx = await browser.newContext();
+  const other = await ctx.newPage();
+  await signUp(other.request);
+  await other.goto(`/b/${boardId}`);
+  await expect(other.getByText(/doesn.t exist or you don.t have access/)).toBeVisible();
+  const ws = await other.request.get(`/api/boards/${boardId}/ws`, { headers: { upgrade: 'websocket' } });
+  expect(ws.status()).toBe(404);
+  await ctx.close();
+});
+
+test('signs up and out through the UI', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Sign up' }).click();
+  await page.getByPlaceholder('Your name').fill('UI Person');
+  await page.getByPlaceholder('Email').fill(`ui-${Date.now()}@test.dev`);
+  await page.getByPlaceholder(/Password/).fill('password1234');
+  await page.getByRole('button', { name: 'Create account' }).click();
+  await expect(page.getByRole('heading', { name: 'Your boards' })).toBeVisible();
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
+});

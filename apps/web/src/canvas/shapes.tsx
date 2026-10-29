@@ -10,6 +10,7 @@ import type {
 import { memo, useMemo } from 'react';
 import { Arrow, Ellipse, Group, Image as KImage, Line, Path, Rect, Text } from 'react-konva';
 import { useAssetImage } from '../doc/assets';
+import { useBoard } from '../doc/context';
 import { freehandPath } from './freehand';
 import { FONT_FAMILY, LINE_HEIGHT, SHAPE_PADDING, STICKY_PADDING, autoFontSize } from './text';
 
@@ -135,7 +136,7 @@ const Pen = ({ o }: { o: PenObject }) => {
 };
 
 const ImageNode = ({ o }: { o: ImageObject }) => {
-  const img = useAssetImage(o.assetId);
+  const img = useAssetImage(useBoard().id, o.assetId);
   return (
     <Group {...boxGroupProps(o)}>
       {img ? (

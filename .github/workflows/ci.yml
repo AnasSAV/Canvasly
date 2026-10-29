@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -26,11 +27,55 @@ jobs:
       - run: pnpm test
       - name: Install Playwright browser
         run: pnpm --filter @canvasly/web exec playwright install --with-deps chromium
-      - name: End-to-end tests
-        run: pnpm --filter @canvasly/web test:e2e
+      - name: End-to-end tests (local wrangler + Vite)
+        run: |
+          cp apps/worker/.dev.vars.example apps/worker/.dev.vars
+          pnpm --filter @canvasly/web test:e2e
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: playwright-report
           path: apps/web/test-results
           retention-days: 7
+
+  # Deploys main to Cloudflare after checks pass. Skipped until the repository has the
+  # CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets (see README → Deploy).
+  deploy:
+    needs: check
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    concurrency: deploy-production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Check Cloudflare secrets
+        id: secrets
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Cloudflare secrets not configured; skipping deploy."
+          fi
+      - uses: actions/checkout@v4
+        if: steps.secrets.outputs.ok == 'true'
+      - uses: pnpm/action-setup@v4
+        if: steps.secrets.outputs.ok == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.secrets.outputs.ok == 'true'
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        if: steps.secrets.outputs.ok == 'true'
+      - name: Build web app
+        if: steps.secrets.outputs.ok == 'true'
+        run: pnpm --filter @canvasly/web build
+      - name: Apply D1 migrations
+        if: steps.secrets.outputs.ok == 'true'
+        working-directory: apps/worker
+        run: pnpm exec wrangler d1 migrations apply DB --remote
+      - name: Deploy Worker + static assets
+        if: steps.secrets.outputs.ok == 'true'
+        working-directory: apps/worker
+        run: pnpm exec wrangler deploy

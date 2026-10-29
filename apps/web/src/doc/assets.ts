@@ -1,10 +1,12 @@
-import { newId } from '@canvasly/shared';
-import { get, set } from 'idb-keyval';
+import { MAX_ASSET_BYTES } from '@canvasly/shared';
 import { useEffect, useState } from 'react';
+import { ApiError } from '../lib/api';
 
-/** Phase 1 keeps image blobs in IndexedDB; Phase 2 moves them to the board's Durable Object. */
+/**
+ * Images are stored in the board's Durable Object SQLite (no R2: it needs a card on file). To keep that
+ * cheap we downscale to 1600px and re-encode as WebP under 1 MB in the browser before uploading.
+ */
 export const MAX_IMAGE_SIDE = 1600;
-export const MAX_IMAGE_BYTES = 1024 * 1024;
 export const MAX_INPUT_BYTES = 25 * 1024 * 1024;
 
 async function decode(blob: Blob): Promise<ImageBitmap | HTMLImageElement> {
@@ -24,7 +26,7 @@ async function decode(blob: Blob): Promise<ImageBitmap | HTMLImageElement> {
   }
 }
 
-/** Downscale to MAX_IMAGE_SIDE and re-encode as WebP, lowering quality/size until under MAX_IMAGE_BYTES. */
+/** Downscale to MAX_IMAGE_SIDE and re-encode as WebP, lowering quality/size until under MAX_ASSET_BYTES. */
 export async function compressImage(file: Blob): Promise<{ blob: Blob; width: number; height: number }> {
   if (file.size > MAX_INPUT_BYTES) throw new Error('Image is larger than 25 MB');
   const src = await decode(file);
@@ -40,45 +42,61 @@ export async function compressImage(file: Blob): Promise<{ blob: Blob; width: nu
     canvas.getContext('2d')!.drawImage(src, 0, 0, width, height);
     for (const quality of [0.85, 0.7, 0.55]) {
       const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/webp', quality));
-      if (blob && blob.size <= MAX_IMAGE_BYTES) return { blob, width, height };
+      if (blob && blob.size <= MAX_ASSET_BYTES) return { blob, width, height };
     }
     scale *= 0.75;
   }
   throw new Error('Could not compress image under 1 MB');
 }
 
-export async function putAsset(blob: Blob): Promise<string> {
-  const id = newId();
-  await set(`asset:${id}`, blob);
-  return id;
+export const assetUrl = (boardId: string, assetId: string) => `/api/boards/${boardId}/assets/${assetId}`;
+
+export async function uploadAsset(boardId: string, blob: Blob): Promise<string> {
+  const res = await fetch(`/api/boards/${boardId}/assets`, {
+    method: 'POST',
+    body: blob,
+    headers: { 'content-type': blob.type },
+  });
+  const body = (await res.json().catch(() => ({}))) as { id?: string; error?: string };
+  if (!res.ok || !body.id) throw new ApiError(res.status, body.error ?? 'Upload failed');
+  return body.id;
 }
 
-const imageCache = new Map<string, Promise<HTMLImageElement | null>>();
+const images = new Map<string, Promise<HTMLImageElement | null>>();
+const loaded = new Map<string, HTMLImageElement>();
 
-function loadAsset(assetId: string): Promise<HTMLImageElement | null> {
-  let p = imageCache.get(assetId);
+function loadImage(url: string): Promise<HTMLImageElement | null> {
+  let p = images.get(url);
   if (!p) {
-    p = (async () => {
-      const blob = await get<Blob>(`asset:${assetId}`);
-      if (!blob) return null;
-      const img = new Image();
-      img.src = URL.createObjectURL(blob);
-      await img.decode();
-      return img;
-    })().catch(() => null);
-    imageCache.set(assetId, p);
+    const img = new Image();
+    img.src = url;
+    p = img
+      .decode()
+      .then(() => {
+        loaded.set(url, img);
+        return img;
+      })
+      .catch(() => {
+        images.delete(url); // allow a retry later (e.g. after reconnecting)
+        return null;
+      });
+    images.set(url, p);
   }
   return p;
 }
 
-export function useAssetImage(assetId: string): HTMLImageElement | null {
-  const [img, setImg] = useState<HTMLImageElement | null>(null);
+/** Already-decoded image for synchronous drawing (thumbnails), or null. */
+export const getLoadedImage = (url: string) => loaded.get(url) ?? null;
+
+export function useAssetImage(boardId: string, assetId: string): HTMLImageElement | null {
+  const url = assetUrl(boardId, assetId);
+  const [img, setImg] = useState<HTMLImageElement | null>(() => getLoadedImage(url));
   useEffect(() => {
     let alive = true;
-    void loadAsset(assetId).then((i) => alive && setImg(i));
+    void loadImage(url).then((i) => alive && setImg(i));
     return () => {
       alive = false;
     };
-  }, [assetId]);
+  }, [url]);
   return img;
 }

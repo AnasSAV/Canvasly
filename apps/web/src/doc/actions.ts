@@ -1,7 +1,7 @@
 import { ClipboardPayload, makeImage, makeSticky, STICKY_SIZE, type Vec } from '@canvasly/shared';
 import { useUI } from '../state/ui';
 import { useViewport } from '../state/viewport';
-import { compressImage, putAsset } from './assets';
+import { compressImage, uploadAsset } from './assets';
 import type { Board } from './board';
 import {
   addObjects,
@@ -102,7 +102,7 @@ export function createActions(board: Board, getPointerWorld: () => Vec | null) {
         if (!file.type.startsWith('image/')) continue;
         try {
           const { blob, width, height } = await compressImage(file);
-          const assetId = await putAsset(blob);
+          const assetId = await uploadAsset(board.id, blob);
           const img = makeImage(pos, nextZ(board.store), assetId, width, height);
           addObjects(board, [img]);
           created.push(img.id);

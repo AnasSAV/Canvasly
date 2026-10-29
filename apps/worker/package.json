@@ -1,0 +1,28 @@
+{
+  "name": "@canvasly/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "predev": "node scripts/predev.mjs && pnpm db:migrate:local",
+    "dev": "wrangler dev --port 8787",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "cf-typegen": "wrangler types --include-runtime=false",
+    "typecheck": "tsc -p tsconfig.json",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@canvasly/shared": "workspace:*",
+    "better-auth": "^1.7.14",
+    "hono": "^4.13.14",
+    "lib0": "^0.2.119",
+    "y-protocols": "^1.0.7",
+    "yjs": "^13.6.33"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261028.1",
+    "typescript": "~6.0.3",
+    "wrangler": "^4.154.0"
+  }
+}
