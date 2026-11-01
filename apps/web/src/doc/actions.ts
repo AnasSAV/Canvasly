@@ -1,4 +1,19 @@
-import { ClipboardPayload, makeImage, makeSticky, STICKY_SIZE, type Vec } from '@canvasly/shared';
+import {
+  ClipboardPayload,
+  buildTemplate,
+  hasText,
+  makeChart,
+  makeImage,
+  makeSticky,
+  makeTable,
+  makeText,
+  patchObject,
+  STICKY_SIZE,
+  type BoardObject,
+  type ChartKind,
+  type TemplateId,
+  type Vec,
+} from '@canvasly/shared';
 import { useUI } from '../state/ui';
 import { useViewport } from '../state/viewport';
 import { compressImage, uploadAsset } from './assets';
@@ -11,12 +26,15 @@ import {
   deleteObjects,
   duplicate,
   expandGroups,
+  getStartView,
   group,
+  insertAt,
   nextZ,
   nudge,
   pastePayload,
   selectionBounds,
   sendToBack,
+  setStartView,
   toggleLock,
   ungroup,
 } from './ops';
@@ -53,12 +71,63 @@ export function createActions(board: Board, getPointerWorld: () => Vec | null) {
     group: () => editable() && group(board, sel()),
     ungroup: () => editable() && ungroup(board, sel()),
     toggleLock: () => editable() && toggleLock(board, sel()),
+    unlockAll: () => {
+      if (!editable()) return;
+      board.transact(() => {
+        for (const o of board.store.all()) if (o.locked) patchObject(board.objects, o.id, { locked: false });
+      }, true);
+    },
     bringToFront: () => editable() && bringToFront(board, sel()),
     sendToBack: () => editable() && sendToBack(board, sel()),
     nudge: (dx: number, dy: number) => editable() && nudge(board, sel(), dx, dy),
     zoomToFit: () => {
       const ids = sel();
       useViewport.getState().fit(ids.length ? selectionBounds(board.store, ids) : contentBounds(board.store));
+    },
+
+    /** Enter on the selection: edit text, the first table cell, or a chart's data. */
+    editSelected: () => {
+      const o = board.store.get(ui().selectedIds[0] ?? '');
+      if (!o || o.locked || !editable()) return;
+      if (o.type === 'table')
+        ui().setEditingCell({ id: o.id, rowId: o.rows[0]!.id, colId: o.columns[0]!.id });
+      else if (o.type === 'chart') ui().setChartEditor(o.id);
+      else if (hasText(o)) ui().setEditing(o.id);
+    },
+
+    /** Everything on the board, regardless of selection (Alt+1). */
+    showAll: () => useViewport.getState().fit(contentBounds(board.store)),
+    goToStartView: () => {
+      const v = getStartView(board);
+      if (v) useViewport.getState().fitExact(v);
+      else actions.showAll();
+    },
+    setCurrentViewAsStart: () => {
+      if (editable()) setStartView(board, useViewport.getState().visibleRect());
+    },
+
+    /** Place new objects at the center of the view and select them. */
+    insertObjects: (objects: BoardObject[], at?: Vec) => {
+      if (!editable() || !objects.length) return;
+      const ids = insertAt(board, objects, at ?? viewCenter());
+      ui().setTool('select');
+      ui().select(ids);
+    },
+    insertTemplate: (id: TemplateId) => {
+      const objects = buildTemplate(id);
+      actions.insertObjects(objects);
+      const b = selectionBounds(board.store, ui().selectedIds);
+      if (b) useViewport.getState().fit(b);
+    },
+    insertTable: () => actions.insertObjects([makeTable(viewCenter(), nextZ(board.store))]),
+    insertChart: (kind: ChartKind) => {
+      actions.insertObjects([makeChart(viewCenter(), nextZ(board.store), kind)]);
+      ui().setChartEditor(ui().selectedIds[0] ?? null);
+    },
+    insertSticker: (emoji: string) => {
+      const at = viewCenter();
+      const t = makeText({ x: at.x - 40, y: at.y - 40 }, nextZ(board.store), '#1a1a1a', 64);
+      actions.insertObjects([{ ...t, text: emoji, w: 90, h: 80 }]);
     },
 
     /** Serialize the selection; returns the text to put on the clipboard. */
@@ -75,7 +144,7 @@ export function createActions(board: Board, getPointerWorld: () => Vec | null) {
       return text;
     },
     /** Paste canvasly JSON (or the in-app clipboard when empty); other plain text becomes a sticky note. */
-    pasteText: (text: string | null) => {
+    pasteText: (text: string | null, target?: Vec) => {
       if (!editable()) return;
       let payload: ClipboardPayload | null = null;
       if (text) {
@@ -88,7 +157,7 @@ export function createActions(board: Board, getPointerWorld: () => Vec | null) {
       } else {
         payload = memoryClipboard;
       }
-      const at = getPointerWorld() ?? viewCenter();
+      const at = target ?? getPointerWorld() ?? viewCenter();
       if (payload) {
         const ids = pastePayload(board, payload, at);
         ui().select(expandGroups(board.store, ids));
@@ -99,6 +168,24 @@ export function createActions(board: Board, getPointerWorld: () => Vec | null) {
         );
         addObjects(board, [{ ...sticky, color: ui().stickyColor, text: text.trim().slice(0, 2000) }]);
         ui().select([sticky.id]);
+      }
+    },
+
+    /** Menu-driven paste: reads the system clipboard if the browser allows, else the in-app clipboard. */
+    pasteAt: async (at: Vec) => {
+      if (!editable()) return;
+      try {
+        for (const item of await navigator.clipboard.read()) {
+          const type = item.types.find((t) => t.startsWith('image/'));
+          if (type) {
+            const blob = await item.getType(type);
+            await actions.insertImages([new File([blob], 'pasted-image', { type })], at);
+            return;
+          }
+        }
+        actions.pasteText((await navigator.clipboard.readText()) || null, at);
+      } catch {
+        actions.pasteText(null, at);
       }
     },
 

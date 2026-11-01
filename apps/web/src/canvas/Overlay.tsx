@@ -9,16 +9,18 @@ import {
 } from '@canvasly/shared';
 import type Konva from 'konva';
 import { useEffect, useMemo, useRef } from 'react';
-import { Circle, Ellipse, Layer, Line, Path, Rect, Transformer } from 'react-konva';
+import { Circle, Layer, Line, Path, Rect, Shape, Transformer } from 'react-konva';
 import { useBoard, useDocVersion } from '../doc/context';
 import { usePeers } from '../hooks/usePresence';
+import { usePrefs } from '../state/prefs';
 import { useUI } from '../state/ui';
 import { useViewport } from '../state/viewport';
 import { freehandPath } from './freehand';
+import { traceShape } from './shapePaths';
 import { textHeight } from './text';
 import { ConnectorNode } from './shapes';
 
-const ACCENT = '#4f46e5';
+const ACCENT = '#4262ff';
 /** Strip float noise from transform results to keep documents small and diffs clean. */
 const round = (v: number) => Math.round(v * 100) / 100;
 /** Kept small so the floating selection toolbar can sit above the rotate handle. */
@@ -58,8 +60,46 @@ function SelectionTransformer({ stage }: { stage: Konva.Stage | null }) {
     useUI.getState().setInteracting(true);
   };
 
+  /** Publish the live size while dragging handles, for "Show object size". */
+  const onTransform = () => {
+    const tr = trRef.current;
+    const node = tr?.nodes()[0];
+    const o = node && board.store.get(node.id());
+    if (!tr || !node || !o || !isBoxObject(o) || tr.nodes().length !== 1) return;
+    const r = tr.getClientRect();
+    useUI.getState().setLiveSize({
+      w: o.w * node.scaleX(),
+      h: o.h * node.scaleY(),
+      x: r.x + r.width / 2,
+      y: r.y + r.height,
+    });
+  };
+
+  /** "Suggest object size": while resizing, lock onto the size of another object of the same kind. */
+  const suggestSize = (box: { x: number; y: number; width: number; height: number; rotation: number }) => {
+    if (!single || !usePrefs.getState().suggestObjectSize || single.rotation !== 0 || keepRatio) return box;
+    const zoom = useViewport.getState().camera.zoom;
+    const anchor = trRef.current?.getActiveAnchor() ?? '';
+    const next = { ...box };
+    for (const o of board.store.all()) {
+      if (o.id === single.id || o.type !== single.type || !isBoxObject(o)) continue;
+      const w = o.w * zoom;
+      const h = o.h * zoom;
+      if (Math.abs(next.width - w) < 5 && next.width !== w) {
+        if (anchor.includes('left')) next.x -= w - next.width;
+        next.width = w;
+      }
+      if (Math.abs(next.height - h) < 5 && next.height !== h) {
+        if (anchor.includes('top')) next.y -= h - next.height;
+        next.height = h;
+      }
+    }
+    return next;
+  };
+
   const onTransformEnd = () => {
     const tr = trRef.current;
+    useUI.getState().setLiveSize(null);
     if (!tr) return;
     board.transact(() => {
       for (const node of tr.nodes()) {
@@ -76,6 +116,10 @@ function SelectionTransformer({ stage }: { stage: Konva.Stage | null }) {
           h: round(Math.max(4, o.h * sy)),
         };
         if (o.type === 'pen') p.points = o.points.map((v, i) => round(i % 2 === 0 ? v * sx : v * sy));
+        if (o.type === 'table') {
+          p.columns = o.columns.map((c) => ({ ...c, w: round(c.w * sx) }));
+          p.rows = o.rows.map((r) => ({ ...r, h: round(r.h * sy) }));
+        }
         if (o.type === 'text') {
           const sideDrag = anchorRef.current === 'middle-left' || anchorRef.current === 'middle-right';
           const fontSize = sideDrag ? o.fontSize : Math.min(400, Math.max(4, round(o.fontSize * sy)));
@@ -90,13 +134,14 @@ function SelectionTransformer({ stage }: { stage: Konva.Stage | null }) {
   };
 
   const textOnly = single?.type === 'text';
+  const keepRatio = single?.type === 'sticky' || single?.type === 'image' || textOnly;
   return (
     <Transformer
       ref={trRef}
       visible={boxes.length > 0}
       rotateEnabled={!anyLocked}
       resizeEnabled={!anyLocked}
-      keepRatio={single?.type === 'sticky' || single?.type === 'image' || textOnly}
+      keepRatio={keepRatio}
       enabledAnchors={
         textOnly
           ? ['top-left', 'top-right', 'middle-left', 'middle-right', 'bottom-left', 'bottom-right']
@@ -124,8 +169,9 @@ function SelectionTransformer({ stage }: { stage: Konva.Stage | null }) {
       rotateAnchorOffset={ROTATE_ANCHOR_OFFSET}
       padding={2}
       boundBoxFunc={(oldBox, newBox) =>
-        Math.abs(newBox.width) < 8 || Math.abs(newBox.height) < 8 ? oldBox : newBox
+        Math.abs(newBox.width) < 8 || Math.abs(newBox.height) < 8 ? oldBox : suggestSize(newBox)
       }
+      onTransform={onTransform}
       onTransformStart={onTransformStart}
       onTransformEnd={onTransformEnd}
     />
@@ -221,8 +267,6 @@ function AttachHighlight({ zoom }: { zoom: number }) {
 function Draft({ zoom }: { zoom: number }) {
   const board = useBoard();
   const draft = useUI((s) => s.draft);
-  const penColor = useUI((s) => s.penColor);
-  const penSize = useUI((s) => s.penSize);
   if (!draft) return null;
   switch (draft.kind) {
     case 'shape': {
@@ -233,14 +277,33 @@ function Draft({ zoom }: { zoom: number }) {
         dash: [6 / zoom, 4 / zoom],
         listening: false,
       };
-      if (draft.shape === 'ellipse')
-        return <Ellipse x={x + w / 2} y={y + h / 2} radiusX={w / 2} radiusY={h / 2} {...common} />;
-      if (draft.shape === 'triangle')
-        return <Line points={[x + w / 2, y, x + w, y + h, x, y + h]} closed {...common} />;
-      return <Rect x={x} y={y} width={w} height={h} {...common} />;
+      const { shape } = draft;
+      if (shape === 'frame' || shape === 'startview')
+        return <Rect x={x} y={y} width={w} height={h} {...common} />;
+      return (
+        <Shape
+          x={x}
+          y={y}
+          width={w}
+          height={h}
+          {...common}
+          sceneFunc={(c, s) => {
+            c.beginPath();
+            traceShape((c as unknown as { _context: CanvasRenderingContext2D })._context, shape, w, h);
+            c.fillStrokeShape(s);
+          }}
+        />
+      );
     }
     case 'pen':
-      return <Path data={freehandPath(draft.points, penSize)} fill={penColor} listening={false} />;
+      return (
+        <Path
+          data={freehandPath(draft.points, draft.size)}
+          fill={draft.color}
+          opacity={draft.opacity}
+          listening={false}
+        />
+      );
     case 'connector': {
       const r = board.store.resolve({ start: draft.start, end: draft.end, routing: 'straight' });
       if (!r) return null;

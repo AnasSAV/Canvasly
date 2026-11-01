@@ -21,7 +21,8 @@ test('dashboard: create, open, rename and delete a board', async ({ page }) => {
   await page.getByTestId('board-canvas').click({ position: { x: 600, y: 400 } });
   await page.keyboard.type('Thumbnail me');
   await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: 'Back to boards' }).click();
+  await page.getByTestId('main-menu').click();
+  await page.getByRole('menuitem', { name: 'Back to boards' }).click();
 
   await expect(page).toHaveURL(/\/$/);
   const card = page.getByTestId('board-card');
@@ -90,4 +91,20 @@ test('signs up and out through the UI', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Your boards' })).toBeVisible();
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
+});
+
+test('forgot password and reset screens', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Forgot password?' }).click();
+  await page.getByPlaceholder('Email').fill('someone@test.dev');
+  await page.getByRole('button', { name: 'Send reset link' }).click();
+  // Same answer whether or not the account exists (no account enumeration).
+  await expect(page.getByText('If an account exists for someone@test.dev')).toBeVisible();
+
+  await page.goto('/reset-password?error=INVALID_TOKEN');
+  await expect(page.getByText('This reset link is invalid or has expired.')).toBeVisible();
+  await page.goto('/reset-password?token=not-a-real-token');
+  await page.getByPlaceholder('New password').fill('new-password-123');
+  await page.getByRole('button', { name: 'Set password' }).click();
+  await expect(page.locator('p.text-red-600')).toBeVisible();
 });

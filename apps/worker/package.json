@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "predev": "node scripts/predev.mjs && pnpm db:migrate:local",
-    "dev": "wrangler dev --port 8787",
+    "dev": "wrangler dev --port 8787 --infer-origin-from-routes=false",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "cf-typegen": "wrangler types --include-runtime=false",

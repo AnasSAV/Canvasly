@@ -9,6 +9,8 @@ import {
 import {
   ArrowDownToLine,
   ArrowUpToLine,
+  ChartColumn,
+  Columns2,
   Copy,
   CornerDownRight,
   Group,
@@ -17,6 +19,7 @@ import {
   Minus,
   MoveUpRight,
   Plus,
+  Rows2,
   Trash,
   Ungroup,
 } from 'lucide-react';
@@ -24,7 +27,15 @@ import { useState, type ReactNode } from 'react';
 import type { Actions } from '../doc/actions';
 import { ROTATE_ANCHOR_OFFSET } from '../canvas/Overlay';
 import { useBoard, useDocVersion } from '../doc/context';
-import { selectionBounds, updateEach } from '../doc/ops';
+import {
+  addTableColumn,
+  addTableRow,
+  deleteTableColumn,
+  deleteTableRow,
+  selectionBounds,
+  updateEach,
+} from '../doc/ops';
+import { usePrefs } from '../state/prefs';
 import { useUI } from '../state/ui';
 import { useViewport } from '../state/viewport';
 import { IconButton, Swatch, panel } from './IconButton';
@@ -196,6 +207,74 @@ function StyleControls({ objs, ids }: { objs: BoardObject[]; ids: string[] }) {
       />,
     );
   }
+  if (only('table') && first?.type === 'table' && objs.length === 1) {
+    const active = useUI.getState().activeCell;
+    const cell = active?.id === first.id ? active : null;
+    const label = (t: string) => <span className="px-0.5 text-xs font-medium">{t}</span>;
+    controls.push(
+      <IconButton
+        key="add-row"
+        label="Add row"
+        onClick={() => addTableRow(board, first, cell?.rowId)}
+        data-testid="table-add-row"
+      >
+        <Rows2 size={16} />
+        {label('+')}
+      </IconButton>,
+      <IconButton
+        key="del-row"
+        label="Delete row"
+        disabled={first.rows.length <= 1}
+        onClick={() => deleteTableRow(board, first, cell?.rowId)}
+        data-testid="table-delete-row"
+      >
+        <Rows2 size={16} />
+        {label('−')}
+      </IconButton>,
+      <IconButton
+        key="add-col"
+        label="Add column"
+        onClick={() => addTableColumn(board, first, cell?.colId)}
+        data-testid="table-add-column"
+      >
+        <Columns2 size={16} />
+        {label('+')}
+      </IconButton>,
+      <IconButton
+        key="del-col"
+        label="Delete column"
+        disabled={first.columns.length <= 1}
+        onClick={() => deleteTableColumn(board, first, cell?.colId)}
+        data-testid="table-delete-column"
+      >
+        <Columns2 size={16} />
+        {label('−')}
+      </IconButton>,
+      <button
+        key="header"
+        type="button"
+        aria-pressed={first.headerRow}
+        title="Header row"
+        onClick={() => updateEach(board, ids, () => ({ headerRow: !first.headerRow }))}
+        className={`h-10 rounded-lg px-2 text-xs font-medium ${first.headerRow ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300' : 'hover:bg-gray-100 dark:hover:bg-zinc-800'}`}
+      >
+        Header
+      </button>,
+    );
+  }
+  if (only('chart') && first?.type === 'chart' && objs.length === 1) {
+    controls.push(
+      <button
+        key="edit-chart"
+        type="button"
+        onClick={() => useUI.getState().setChartEditor(first.id)}
+        className="flex h-10 items-center gap-1.5 rounded-lg px-2 text-xs font-medium hover:bg-gray-100 dark:hover:bg-zinc-800"
+        data-testid="chart-edit"
+      >
+        <ChartColumn size={16} /> Edit data
+      </button>,
+    );
+  }
   if (only('connector') && first?.type === 'connector') {
     const conn = (fn: (c: ConnectorObject) => Partial<ConnectorObject>) =>
       updateEach(board, ids, (o) => (o.type === 'connector' ? fn(o) : null));
@@ -242,19 +321,46 @@ function StyleControls({ objs, ids }: { objs: BoardObject[]; ids: string[] }) {
   );
 }
 
+/** Width × height tag under the selection ("Show object size"), live while resizing. */
+export function ObjectSizeTag() {
+  const board = useBoard();
+  useDocVersion(board);
+  const show = usePrefs((s) => s.showObjectSize);
+  const selectedIds = useUI((s) => s.selectedIds);
+  const live = useUI((s) => s.liveSize);
+  const camera = useViewport((s) => s.camera);
+  if (!show || selectedIds.length !== 1) return null;
+  const o = board.store.get(selectedIds[0]!);
+  const bounds = board.store.getBounds(selectedIds[0]!);
+  if (!o || o.type === 'connector' || !bounds) return null;
+  const at = worldToScreen(camera, { x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h });
+  const size = live ?? o;
+  const pos = live ?? at;
+  return (
+    <div
+      className="pointer-events-none absolute z-10 -translate-x-1/2 rounded bg-indigo-600 px-1.5 py-0.5 text-[11px] font-medium text-white tabular-nums"
+      style={{ left: pos.x, top: pos.y + 10 }}
+      data-testid="object-size"
+    >
+      {Math.round(size.w)} × {Math.round(size.h)}
+    </div>
+  );
+}
+
 export function SelectionToolbar({ actions }: { actions: Actions }) {
   const board = useBoard();
   useDocVersion(board);
   const selectedIds = useUI((s) => s.selectedIds);
   const interacting = useUI((s) => s.interacting);
   const editingId = useUI((s) => s.editingId);
+  const editingCell = useUI((s) => s.editingCell);
   const readOnly = useUI((s) => s.readOnly);
   const camera = useViewport((s) => s.camera);
   const width = useViewport((s) => s.width);
 
   const objs = selectedIds.map((id) => board.store.get(id)).filter((o) => o !== undefined);
   const bounds = selectionBounds(board.store, selectedIds);
-  if (!objs.length || !bounds || interacting || editingId || readOnly) return null;
+  if (!objs.length || !bounds || interacting || editingId || editingCell || readOnly) return null;
 
   const top = worldToScreen(camera, { x: bounds.x + bounds.w / 2, y: bounds.y });
   const bottom = worldToScreen(camera, { x: 0, y: bounds.y + bounds.h }).y;
@@ -267,7 +373,7 @@ export function SelectionToolbar({ actions }: { actions: Actions }) {
   const grouped = objs.some((o) => o.groupId);
   return (
     <div
-      className={`${panel} absolute z-20 flex -translate-x-1/2 items-center gap-0.5 p-1`}
+      className={`${panel} absolute z-10 flex -translate-x-1/2 items-center gap-0.5 p-1`}
       style={{ left: x, top: y }}
       onPointerDown={(e) => e.stopPropagation()}
       data-testid="selection-toolbar"

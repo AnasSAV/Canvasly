@@ -1,4 +1,4 @@
-import { Download } from 'lucide-react';
+import { Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useBoard } from '../doc/context';
 import { exportJson, exportPdf, exportPng, importJson } from '../lib/exporters';
@@ -7,7 +7,7 @@ import { useViewport } from '../state/viewport';
 import { IconButton, panel } from './IconButton';
 
 const item =
-  'flex w-full items-center px-3 py-1.5 text-left text-sm hover:bg-gray-50 disabled:opacity-40 dark:hover:bg-zinc-800';
+  'flex w-full items-center px-3 py-1.5 text-left text-sm whitespace-nowrap hover:bg-gray-100 disabled:opacity-40 dark:hover:bg-zinc-800';
 
 export function ExportMenu({ title }: { title: string }) {
   const board = useBoard();
@@ -45,10 +45,10 @@ export function ExportMenu({ title }: { title: string }) {
         disabled={busy}
         data-testid="export-menu"
       >
-        <Download size={18} />
+        <Upload size={18} />
       </IconButton>
       {open && (
-        <div className={`${panel} absolute top-11 right-0 z-30 w-56 py-1`} role="menu">
+        <div className={`${panel} absolute top-12 left-0 z-30 w-56 py-1.5`} role="menu">
           <button type="button" role="menuitem" className={item} onClick={run(() => exportPng(board, title))}>
             Board as PNG
           </button>

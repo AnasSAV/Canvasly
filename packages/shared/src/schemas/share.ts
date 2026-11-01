@@ -41,6 +41,8 @@ export const InviteResult = z.object({
   /** 'added' = an account with that email existed and now has access; 'pending' = waiting for sign-up. */
   status: z.enum(['added', 'pending']),
   name: z.string().nullable(),
+  /** Whether a notification email went out (false when email isn't configured or sending failed). */
+  emailed: z.boolean(),
   settings: ShareSettings,
 });
 export type InviteResult = z.infer<typeof InviteResult>;

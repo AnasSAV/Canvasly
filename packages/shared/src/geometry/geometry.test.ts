@@ -7,6 +7,7 @@ import {
   resolveConnector,
   type AttachTarget,
 } from './connectors';
+import { SHAPE_VERTICES, shapeTextBox } from './shapes';
 import { snapRect, snapToGrid } from './snap';
 import { fitFontSize, wrapText, type MeasureText } from './textFit';
 import {
@@ -123,6 +124,37 @@ describe('connectors', () => {
     const bottom = clipToOutline(tri, { x: 50, y: 1000 });
     close(bottom.x, 50);
     close(bottom.y, 100);
+  });
+
+  it('clips to every polygon outline, staying inside the box', () => {
+    for (const outline of Object.keys(SHAPE_VERTICES)) {
+      const target: AttachTarget = { x: 0, y: 0, w: 100, h: 100, rotation: 0, outline };
+      for (const toward of [
+        { x: 1000, y: 50 },
+        { x: 50, y: 1000 },
+        { x: -500, y: -500 },
+      ]) {
+        const p = clipToOutline(target, toward);
+        expect(p.x).toBeGreaterThanOrEqual(-1e-6);
+        expect(p.x).toBeLessThanOrEqual(100 + 1e-6);
+        expect(p.y).toBeGreaterThanOrEqual(-1e-6);
+        expect(p.y).toBeLessThanOrEqual(100 + 1e-6);
+      }
+    }
+    // A diamond's right tip, not the box edge's corner.
+    const d = clipToOutline(
+      { x: 0, y: 0, w: 100, h: 100, rotation: 0, outline: 'diamond' },
+      { x: 75, y: 25 },
+    );
+    close(d.x, 75);
+    close(d.y, 25);
+  });
+
+  it('keeps shape text boxes inside the shape box', () => {
+    const b = shapeTextBox('diamond', 200, 100, 4);
+    expect(b.x).toBeGreaterThan(0);
+    expect(b.x + b.w).toBeLessThan(200);
+    expect(shapeTextBox('rect', 200, 100, 10)).toEqual({ x: 10, y: 10, w: 180, h: 80 });
   });
 
   it('resolves auto-attached ends toward each other and follows moved targets', () => {

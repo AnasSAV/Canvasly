@@ -2,6 +2,8 @@ import { nanoid } from 'nanoid';
 import type { Vec } from '../geometry/vec';
 import {
   STICKY_COLORS,
+  type ChartKind,
+  type ChartObject,
   type ConnectorEnd,
   type ConnectorObject,
   type FrameObject,
@@ -10,6 +12,7 @@ import {
   type ShapeKind,
   type ShapeObject,
   type StickyObject,
+  type TableObject,
   type TextObject,
 } from '../schemas/objects';
 
@@ -119,7 +122,13 @@ export function makeFrame(
 }
 
 /** Build a pen object from absolute world points; stores them relative to their bounding box. */
-export function makePen(worldPoints: readonly number[], z: string, stroke: string, size: number): PenObject {
+export function makePen(
+  worldPoints: readonly number[],
+  z: string,
+  stroke: string,
+  size: number,
+  opacity = 1,
+): PenObject {
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
@@ -145,6 +154,76 @@ export function makePen(worldPoints: readonly number[], z: string, stroke: strin
     points,
     stroke,
     size,
+    opacity,
+  };
+}
+
+export const cellKey = (rowId: string, colId: string): string => `${rowId}:${colId}`;
+
+export const DEFAULT_COLUMN_WIDTH = 160;
+export const DEFAULT_ROW_HEIGHT = 44;
+
+export function makeTable(at: Vec, z: string, rows = 4, cols = 4): TableObject {
+  const columns = Array.from({ length: cols }, () => ({ id: newId(), w: DEFAULT_COLUMN_WIDTH }));
+  const rowList = Array.from({ length: rows }, () => ({ id: newId(), h: DEFAULT_ROW_HEIGHT }));
+  const w = cols * DEFAULT_COLUMN_WIDTH;
+  const h = rows * DEFAULT_ROW_HEIGHT;
+  return {
+    id: newId(),
+    type: 'table',
+    z,
+    locked: false,
+    groupId: null,
+    x: at.x - w / 2,
+    y: at.y - h / 2,
+    w,
+    h,
+    rotation: 0,
+    columns,
+    rows: rowList,
+    cells: {},
+    headerRow: true,
+    headerFill: '#e8ecff',
+    fontSize: 14,
+  };
+}
+
+export const CHART_PALETTE = [
+  '#4262ff',
+  '#2fbf71',
+  '#ff9d48',
+  '#e8318a',
+  '#7048e8',
+  '#0c8599',
+  '#f5d128',
+  '#e03131',
+];
+
+/** Sample data, so a new chart shows something meaningful until it's edited. */
+export function makeChart(at: Vec, z: string, chartKind: ChartKind = 'bar'): ChartObject {
+  const w = 480;
+  const h = 320;
+  const round = chartKind === 'pie' || chartKind === 'donut';
+  return {
+    id: newId(),
+    type: 'chart',
+    z,
+    locked: false,
+    groupId: null,
+    x: at.x - w / 2,
+    y: at.y - h / 2,
+    w,
+    h,
+    rotation: 0,
+    chartKind,
+    title: 'Chart title',
+    labels: round ? ['North', 'South', 'East', 'West'] : ['Q1', 'Q2', 'Q3', 'Q4'],
+    series: round
+      ? [{ name: 'Share', color: CHART_PALETTE[0]!, values: [40, 25, 20, 15] }]
+      : [
+          { name: 'This year', color: CHART_PALETTE[0]!, values: [30, 45, 38, 60] },
+          { name: 'Last year', color: CHART_PALETTE[1]!, values: [22, 30, 35, 41] },
+        ],
   };
 }
 

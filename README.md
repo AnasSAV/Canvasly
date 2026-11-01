@@ -3,10 +3,11 @@
 A Miro-style collaborative whiteboard that runs entirely on Cloudflare's **Workers Free** plan — no
 credit card, no servers that sleep, $0 hosting.
 
-**Features:** infinite canvas (stickies, text, shapes, connectors, pen, images, frames), accounts
-(email/password + optional Google), dashboard with thumbnails and templates, real-time collaboration
-(live cursors, presence, follow mode, per-user undo, offline edits), sharing with roles and public
-links, comments, presentation mode, PNG/PDF/JSON export and JSON import, dark mode, and touch support.
+**Features:** infinite canvas (stickies, text, 18 shapes, connectors, pen and highlighter, images, frames,
+tables, charts), accounts (email/password + optional Google), dashboard with thumbnails and 15 templates,
+real-time collaboration (live cursors, presence, follow mode, per-user undo, offline edits), sharing with
+roles and public links, comments, presentation mode, PNG/PDF/JSON export and JSON import, dark mode, and
+touch support.
 
 ## Architecture
 
@@ -101,8 +102,17 @@ links, comments, presentation mode, PNG/PDF/JSON export and JSON import, dark mo
 - **Frames** (tool `F`): named areas that carry their contents when moved, always drawn beneath other
   objects. The frames panel jumps to a frame, renames it, and starts **presentation mode** (full screen,
   arrows/space/PageUp-Down to navigate, Esc to exit).
-- **Templates:** blank, kanban, retrospective, mind map, flowchart — generated in
-  [`templates.ts`](packages/shared/src/model/templates.ts) and seeded into the new board's DO server-side.
+- **Templates:** 15 across agile, diagrams, strategy, planning and meetings — generated in
+  [`templates.ts`](packages/shared/src/model/templates.ts) and seeded into the new board's DO server-side, or
+  inserted into an open board from the toolbar.
+- **Tables and charts:** tables are one object whose `cells` are a nested `Y.Map`, so edits to different
+  cells merge; adding or removing rows and columns is last-write-wins under concurrent edits. Charts
+  (bar, line, area, pie, donut) are edited in a side panel. Both draw through
+  [`widgets.ts`](apps/web/src/canvas/widgets.ts), shared by the canvas and exports.
+- **Navigation:** the mouse wheel zooms by default; **Preferences → Mouse or trackpad** switches to trackpad
+  mode, where scrolling pans and pinch zooms. Right-drag pans, and a right-click without moving opens the
+  board or object menu. View preferences are per browser (`localStorage`); the start view is stored on the
+  board.
 - **Export:** board or selection as PNG (2×), PDF with one page per frame (or one page for the board), and
   a portable `.canvasly.json` (objects + embedded images) that can be imported into any board. Exports are
   rendered from the document with a canvas-2D renderer, not screenshots, so off-screen objects are
@@ -185,10 +195,43 @@ Everything below is free and needs no payment method.
    ```sh
    cd apps/worker
    pnpm exec wrangler secret put BETTER_AUTH_SECRET     # e.g. output of: openssl rand -base64 32
-   pnpm exec wrangler secret put GOOGLE_CLIENT_ID       # optional
-   # Google redirect URI: https://canvasly.anas-hussaindeen.com/api/auth/callback/google
+   pnpm exec wrangler secret put GOOGLE_CLIENT_ID       # optional, see "Google sign-in" below
    pnpm exec wrangler secret put GOOGLE_CLIENT_SECRET   # optional
+   pnpm exec wrangler secret put RESEND_API_KEY         # optional, see "Email" below
    ```
+
+### Google sign-in
+
+Free; no Google billing account needed.
+
+1. [Google Cloud Console](https://console.cloud.google.com/) → create a project → **APIs & Services →
+   OAuth consent screen**: External, app name "Canvasly", your support email; scopes `email`,
+   `profile`, `openid` (no verification needed for these). Publish the app ("In production") so any
+   Google account can sign in, not just test users.
+2. **Credentials → Create credentials → OAuth client ID → Web application**. Authorized redirect URIs:
+   `https://canvasly.anas-hussaindeen.com/api/auth/callback/google` (and
+   `http://localhost:5173/api/auth/callback/google` for local dev).
+3. Store the client id and secret with the `wrangler secret put` commands above (or in `.dev.vars`
+   locally). The "Continue with Google" button appears once both are set.
+
+A Google sign-in for an email that already has an _unverified_ password account is refused (Better Auth
+won't link into an account whose email ownership isn't proven); the sign-in page explains this.
+
+### Email (Resend)
+
+Cloudflare's Email Service can't send to arbitrary recipients on the Workers Free plan, so Canvasly uses
+[Resend](https://resend.com)'s free tier (3,000 emails/month, 100/day) over HTTPS.
+
+1. Create a Resend account → **Domains → Add domain** `canvasly.anas-hussaindeen.com` → add the DNS
+   records it shows in the Cloudflare dashboard for `anas-hussaindeen.com` (or use Resend's Cloudflare
+   auto-configure). They only add records under `canvasly.…`; nothing else on the domain changes.
+2. **API Keys → Create** with _Sending access_ restricted to that domain, then
+   `pnpm exec wrangler secret put RESEND_API_KEY` (from `apps/worker`).
+
+With a key set, email/password sign-ups must confirm their address (verification email), "Forgot
+password?" sends reset links, invites are emailed, and confirming an address claims boards that were
+shared with it. Without a key (local dev, CI) emails are printed to the wrangler log and verification is off.
+The sender is `vars.EMAIL_FROM` in [`wrangler.jsonc`](apps/worker/wrangler.jsonc).
 
 ## Deploy
 
@@ -245,8 +288,13 @@ packages/shared   Zod schemas, permissions, wire protocol, geometry, Yjs documen
 | I                               | Upload image                                |
 | F / C                           | Frame / Comment                             |
 | Space + drag, middle/right drag | Pan                                         |
-| Ctrl/⌘ + wheel, pinch           | Zoom at cursor                              |
+| Wheel (mouse mode), pinch       | Zoom at cursor                              |
+| Shift + wheel (mouse mode)      | Pan                                         |
+| Right-click                     | Board or object menu                        |
 | Shift+1 / Shift+0               | Zoom to fit / 100%                          |
+| Alt+1                           | Show all                                    |
+| G / Shift+C                     | Show grid / Show comments on board          |
+| ?                               | Shortcuts help                              |
 | Ctrl/⌘ Z, Ctrl/⌘ Shift Z        | Undo / Redo                                 |
 | Ctrl/⌘ D / A / C / X / V        | Duplicate / Select all / Copy / Cut / Paste |
 | Ctrl/⌘ G, Ctrl/⌘ Shift G        | Group / Ungroup                             |

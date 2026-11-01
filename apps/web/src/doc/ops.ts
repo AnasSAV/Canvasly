@@ -1,13 +1,16 @@
 import {
   aabb,
   bringToFrontKeys,
+  cellKey,
   cloneForPaste,
+  getMetaMap,
   insertObject,
   keyAbove,
   keysAbove,
   newId,
   patchObject,
   prepareCopy,
+  removeCells,
   sendToBackKeys,
   unionRects,
   type BoardObject,
@@ -15,6 +18,7 @@ import {
   type ConnectorEnd,
   type ObjectPatch,
   type Rect,
+  type TableObject,
   type Vec,
 } from '@canvasly/shared';
 import type { Board } from './board';
@@ -177,6 +181,95 @@ export function pastePayload(board: Board, payload: ClipboardPayload, at: Vec | 
   const clones = cloneForPaste(payload.objects, offset, zKeys, newId);
   addObjects(board, clones);
   return clones.map((o) => o.id);
+}
+
+/** Add objects built around the origin (templates, insert panels) centered at `at`. Returns the new ids. */
+export function insertAt(board: Board, objects: BoardObject[], at: Vec): string[] {
+  return pastePayload(board, { kind: 'canvasly/objects', version: 1, objects }, at);
+}
+
+// --- tables ---
+
+export function setCell(board: Board, id: string, key: string, text: string) {
+  board.transact(() => patchObject(board.objects, id, { cells: { [key]: text } }));
+}
+
+const sum = (items: readonly { w?: number; h?: number }[]) =>
+  items.reduce((n, i) => n + (i.w ?? i.h ?? 0), 0);
+
+export function addTableRow(board: Board, t: TableObject, afterRowId?: string) {
+  const at = afterRowId ? t.rows.findIndex((r) => r.id === afterRowId) + 1 : t.rows.length;
+  const h = t.rows[t.rows.length - 1]?.h ?? 44;
+  const rows = [...t.rows.slice(0, at), { id: newId(), h }, ...t.rows.slice(at)];
+  board.transact(() => patchObject(board.objects, t.id, { rows, h: sum(rows) }), true);
+}
+
+export function addTableColumn(board: Board, t: TableObject, afterColId?: string) {
+  const at = afterColId ? t.columns.findIndex((c) => c.id === afterColId) + 1 : t.columns.length;
+  const w = t.columns[t.columns.length - 1]?.w ?? 160;
+  const columns = [...t.columns.slice(0, at), { id: newId(), w }, ...t.columns.slice(at)];
+  board.transact(() => patchObject(board.objects, t.id, { columns, w: sum(columns) }), true);
+}
+
+export function deleteTableRow(board: Board, t: TableObject, rowId?: string) {
+  if (t.rows.length <= 1) return;
+  const id = rowId ?? t.rows[t.rows.length - 1]!.id;
+  const rows = t.rows.filter((r) => r.id !== id);
+  board.transact(() => {
+    patchObject(board.objects, t.id, { rows, h: sum(rows) });
+    removeCells(
+      board.objects,
+      t.id,
+      t.columns.map((c) => cellKey(id, c.id)),
+    );
+  }, true);
+}
+
+export function deleteTableColumn(board: Board, t: TableObject, colId?: string) {
+  if (t.columns.length <= 1) return;
+  const id = colId ?? t.columns[t.columns.length - 1]!.id;
+  const columns = t.columns.filter((c) => c.id !== id);
+  board.transact(() => {
+    patchObject(board.objects, t.id, { columns, w: sum(columns) });
+    removeCells(
+      board.objects,
+      t.id,
+      t.rows.map((r) => cellKey(r.id, id)),
+    );
+  }, true);
+}
+
+/** The neighboring cell; moving past the last row adds one, so Tab/Enter keep working at the end. */
+export function moveTableCell(
+  board: Board,
+  t: TableObject,
+  from: { rowId: string; colId: string },
+  dir: 'right' | 'left' | 'down',
+): { rowId: string; colId: string } | null {
+  const r = t.rows.findIndex((x) => x.id === from.rowId);
+  const c = t.columns.findIndex((x) => x.id === from.colId);
+  if (dir === 'left') {
+    if (c > 0) return { rowId: from.rowId, colId: t.columns[c - 1]!.id };
+    return r > 0 ? { rowId: t.rows[r - 1]!.id, colId: t.columns[t.columns.length - 1]!.id } : null;
+  }
+  if (dir === 'right' && c < t.columns.length - 1) return { rowId: from.rowId, colId: t.columns[c + 1]!.id };
+  const col = dir === 'right' ? t.columns[0]!.id : from.colId;
+  if (r < t.rows.length - 1) return { rowId: t.rows[r + 1]!.id, colId: col };
+  addTableRow(board, t);
+  const updated = board.store.get(t.id);
+  return updated?.type === 'table' ? { rowId: updated.rows[updated.rows.length - 1]!.id, colId: col } : null;
+}
+
+// --- start view ---
+
+/** The area the board opens on, shared by everyone; stored in the document's meta map. */
+export function getStartView(board: Board): Rect | null {
+  const v = getMetaMap(board.doc).get('startView') as Rect | undefined;
+  return v && v.w > 0 && v.h > 0 ? v : null;
+}
+
+export function setStartView(board: Board, rect: Rect) {
+  board.transact(() => getMetaMap(board.doc).set('startView', rect));
 }
 
 export function duplicate(board: Board, ids: string[]): string[] {

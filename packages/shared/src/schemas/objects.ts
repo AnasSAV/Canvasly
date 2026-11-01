@@ -37,7 +37,26 @@ export const TextObject = Box.extend({
   align: z.enum(['left', 'center', 'right']).default('left'),
 });
 
-export const SHAPE_KINDS = ['rect', 'ellipse', 'triangle'] as const;
+export const SHAPE_KINDS = [
+  'rect',
+  'roundrect',
+  'ellipse',
+  'triangle',
+  'diamond',
+  'pentagon',
+  'hexagon',
+  'octagon',
+  'star',
+  'parallelogram',
+  'trapezoid',
+  'arrowblock',
+  'chevron',
+  'cross',
+  'cylinder',
+  'cloud',
+  'bubble',
+  'document',
+] as const;
 export type ShapeKind = (typeof SHAPE_KINDS)[number];
 
 const ShapeFields = {
@@ -48,9 +67,7 @@ const ShapeFields = {
   textColor: Color,
 };
 
-export const RectObject = Box.extend({ type: z.literal('rect'), ...ShapeFields });
-export const EllipseObject = Box.extend({ type: z.literal('ellipse'), ...ShapeFields });
-export const TriangleObject = Box.extend({ type: z.literal('triangle'), ...ShapeFields });
+export const ShapeObject = Box.extend({ type: z.enum(SHAPE_KINDS), ...ShapeFields });
 
 export const PenObject = Box.extend({
   type: z.literal('pen'),
@@ -58,6 +75,8 @@ export const PenObject = Box.extend({
   points: z.array(z.number()),
   stroke: Color,
   size: z.number().positive(),
+  /** Below 1 for highlighter strokes. */
+  opacity: z.number().min(0).max(1).default(1),
 });
 
 export const ImageObject = Box.extend({
@@ -72,6 +91,35 @@ export const FrameObject = Box.extend({
   type: z.literal('frame'),
   name: z.string().max(80),
   fill: Color,
+});
+
+/**
+ * Rows and columns have stable ids so inserting or deleting one doesn't renumber the cells. Cell text is keyed
+ * `rowId:colId` and stored as a nested Y.Map, so two people editing different cells never conflict.
+ */
+export const TableObject = Box.extend({
+  type: z.literal('table'),
+  columns: z.array(z.object({ id: z.string(), w: z.number().positive() })).min(1),
+  rows: z.array(z.object({ id: z.string(), h: z.number().positive() })).min(1),
+  cells: z.record(z.string(), z.string()),
+  headerRow: z.boolean().default(true),
+  headerFill: Color,
+  fontSize: z.number().positive().default(14),
+});
+
+export const CHART_KINDS = ['bar', 'line', 'area', 'pie', 'donut'] as const;
+export type ChartKind = (typeof CHART_KINDS)[number];
+
+export const ChartObject = Box.extend({
+  type: z.literal('chart'),
+  chartKind: z.enum(CHART_KINDS),
+  title: z.string().max(120).default(''),
+  labels: z.array(z.string().max(60)).max(60),
+  /** Each series has one value per label. Pie and donut charts use only the first series. */
+  series: z
+    .array(z.object({ name: z.string().max(60), color: Color, values: z.array(z.number().finite()) }))
+    .min(1)
+    .max(8),
 });
 
 /** Anchor in the attached object's local box, normalized 0..1. 'auto' clips toward the other end. */
@@ -96,33 +144,32 @@ export const ConnectorObject = Base.extend({
 export const BoardObject = z.discriminatedUnion('type', [
   StickyObject,
   TextObject,
-  RectObject,
-  EllipseObject,
-  TriangleObject,
+  ShapeObject,
   PenObject,
   ImageObject,
   ConnectorObject,
   FrameObject,
+  TableObject,
+  ChartObject,
 ]);
 
 export type StickyObject = z.infer<typeof StickyObject>;
 export type TextObject = z.infer<typeof TextObject>;
-export type RectObject = z.infer<typeof RectObject>;
-export type EllipseObject = z.infer<typeof EllipseObject>;
-export type TriangleObject = z.infer<typeof TriangleObject>;
+export type ShapeObject = z.infer<typeof ShapeObject>;
 export type PenObject = z.infer<typeof PenObject>;
 export type ImageObject = z.infer<typeof ImageObject>;
 export type ConnectorObject = z.infer<typeof ConnectorObject>;
 export type FrameObject = z.infer<typeof FrameObject>;
+export type TableObject = z.infer<typeof TableObject>;
+export type ChartObject = z.infer<typeof ChartObject>;
 export type ConnectorEnd = z.infer<typeof ConnectorEnd>;
 export type Anchor = z.infer<typeof Anchor>;
 export type BoardObject = z.infer<typeof BoardObject>;
 export type ObjectType = BoardObject['type'];
 export type BoxObject = Exclude<BoardObject, ConnectorObject>;
-export type ShapeObject = RectObject | EllipseObject | TriangleObject;
 
 /** Object types that carry collaboratively-edited text (stored as Y.Text). */
-export const TEXT_TYPES = ['sticky', 'text', 'rect', 'ellipse', 'triangle'] as const satisfies ObjectType[];
+export const TEXT_TYPES = ['sticky', 'text', ...SHAPE_KINDS] as const satisfies ObjectType[];
 export type TextBearingObject = Extract<BoardObject, { type: (typeof TEXT_TYPES)[number] }>;
 
 export function isBoxObject(o: BoardObject): o is BoxObject {
@@ -134,7 +181,7 @@ export function hasText(o: BoardObject): o is TextBearingObject {
 }
 
 export function isShapeObject(o: BoardObject): o is ShapeObject {
-  return o.type === 'rect' || o.type === 'ellipse' || o.type === 'triangle';
+  return (SHAPE_KINDS as readonly string[]).includes(o.type);
 }
 
 export const STICKY_COLORS = [

@@ -3,10 +3,14 @@ import { authClient } from './lib/auth';
 import { matchBoard, matchShareLink, usePathname } from './lib/router';
 import { AuthPage } from './pages/AuthPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 
 export function App() {
   const { data: session, isPending } = authClient.useSession();
   const pathname = usePathname();
+
+  // Reached from the emailed link, signed out.
+  if (pathname === '/reset-password') return <ResetPasswordPage />;
 
   // Share links work signed out too (public view-only boards), so they're routed before the session gate.
   const shareToken = matchShareLink(pathname);

@@ -13,5 +13,5 @@ export const paper = (color: string, dark: boolean) =>
 
 export const canvasColors = (dark: boolean) =>
   dark
-    ? { background: '#18181b', grid: '#3f3f46', frameBorder: '#3f3f46', frameTitle: '#a1a1aa' }
-    : { background: '#f7f7f8', grid: '#c9cbd1', frameBorder: '#d4d4d8', frameTitle: '#52525b' };
+    ? { background: '#18181b', grid: 'rgba(255,255,255,0.05)', frameBorder: '#3f3f46', frameTitle: '#a1a1aa' }
+    : { background: '#f2f2f3', grid: 'rgba(0,0,0,0.045)', frameBorder: '#d4d4d8', frameTitle: '#52525b' };

@@ -1,8 +1,10 @@
 import type { ConnectorEnd, ConnectorObject } from '../schemas/objects';
 import { boundsOfPoints, boxCenter, localToWorld, worldToLocal, type OrientedBox, type Rect } from './box';
+import { SHAPE_VERTICES } from './shapes';
 import { dist, type Vec } from './vec';
 
-export type OutlineKind = 'rect' | 'ellipse' | 'triangle';
+/** A shape kind, or 'rect' for anything clipped against its bounding box. */
+export type OutlineKind = string;
 
 export interface AttachTarget extends OrientedBox {
   outline: OutlineKind;
@@ -17,14 +19,6 @@ export const SIDE_ANCHORS: readonly [number, number][] = [
   [0.5, 1],
   [0, 0.5],
 ];
-
-function triangleVertices(b: OrientedBox): Vec[] {
-  return [
-    { x: b.w / 2, y: 0 },
-    { x: b.w, y: b.h },
-    { x: 0, y: b.h },
-  ];
-}
 
 /** Smallest positive t such that origin + t*dir hits segment ab; Infinity if none. */
 function raySegment(origin: Vec, dir: Vec, a: Vec, b: Vec): number {
@@ -49,16 +43,19 @@ export function clipToOutline(target: AttachTarget, toward: Vec): Vec {
   const d = { x: t.x - c.x, y: t.y - c.y };
   if (Math.abs(d.x) < 1e-9 && Math.abs(d.y) < 1e-9) return boxCenter(target);
 
+  const poly = SHAPE_VERTICES[target.outline];
   let s: number;
-  if (target.outline === 'ellipse') {
+  if (target.outline === 'ellipse' || target.outline === 'cloud') {
     s = 1 / Math.sqrt((d.x / hw) ** 2 + (d.y / hh) ** 2);
-  } else if (target.outline === 'triangle') {
-    const v = triangleVertices(target);
-    s = Math.min(
-      raySegment(c, d, v[0]!, v[1]!),
-      raySegment(c, d, v[1]!, v[2]!),
-      raySegment(c, d, v[2]!, v[0]!),
-    );
+  } else if (poly) {
+    s = Infinity;
+    poly.forEach(([ax, ay], i) => {
+      const [bx, by] = poly[(i + 1) % poly.length]!;
+      const a = { x: ax * target.w, y: ay * target.h };
+      const b = { x: bx * target.w, y: by * target.h };
+      s = Math.min(s, raySegment(c, d, a, b));
+    });
+    if (s === Infinity) return boxCenter(target);
   } else {
     s = Math.min(d.x === 0 ? Infinity : hw / Math.abs(d.x), d.y === 0 ? Infinity : hh / Math.abs(d.y));
   }

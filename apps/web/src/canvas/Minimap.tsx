@@ -1,6 +1,7 @@
 import { expandRect, unionRects, type BoardObject, type Rect } from '@canvasly/shared';
 import { useEffect, useRef } from 'react';
 import { useBoard, useDocVersion } from '../doc/context';
+import { usePrefs } from '../state/prefs';
 import { useViewport } from '../state/viewport';
 import { panel } from '../ui/IconButton';
 
@@ -11,10 +12,9 @@ function colorOf(o: BoardObject): string | null {
   switch (o.type) {
     case 'sticky':
       return o.color;
-    case 'rect':
-    case 'ellipse':
-    case 'triangle':
-      return o.fill === 'transparent' || o.fill === '#ffffff' ? '#cbd5e1' : o.fill;
+    case 'table':
+    case 'chart':
+      return '#c5d0ff';
     case 'pen':
       return o.stroke;
     case 'image':
@@ -25,6 +25,8 @@ function colorOf(o: BoardObject): string | null {
       return '#e4e4e7';
     case 'connector':
       return null;
+    default:
+      return o.fill === 'transparent' || o.fill === '#ffffff' ? '#cbd5e1' : o.fill;
   }
 }
 
@@ -35,6 +37,7 @@ export function Minimap() {
   const camera = useViewport((s) => s.camera);
   const width = useViewport((s) => s.width);
   const height = useViewport((s) => s.height);
+  const show = usePrefs((s) => s.showMinimap);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mapping = useRef<{ world: Rect; scale: number; ox: number; oy: number } | null>(null);
 
@@ -73,7 +76,9 @@ export function Minimap() {
       ctx.strokeRect(vx, vy, view.w * scale, view.h * scale);
     });
     return () => cancelAnimationFrame(raf);
-  }, [board, version, camera, width, height]);
+  }, [board, version, camera, width, height, show]);
+
+  if (!show) return null;
 
   const moveTo = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const m = mapping.current;
@@ -85,7 +90,7 @@ export function Minimap() {
   };
 
   return (
-    <div className={`${panel} absolute right-3 bottom-3 z-10 hidden overflow-hidden sm:block`}>
+    <div className={`${panel} absolute right-3 bottom-[72px] z-10 hidden overflow-hidden sm:block`}>
       <canvas
         ref={canvasRef}
         style={{ width: W, height: H }}

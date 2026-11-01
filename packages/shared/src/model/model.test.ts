@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { resolveConnector } from '../geometry/connectors';
-import type { BoardObject, ConnectorObject } from '../schemas/objects';
+import {
+  BoardObject,
+  CHART_KINDS,
+  SHAPE_KINDS,
+  hasText,
+  isShapeObject,
+  type ConnectorObject,
+} from '../schemas/objects';
 import { cloneForPaste, prepareCopy } from './clipboard';
 import {
   applyTextDiff,
@@ -11,8 +18,9 @@ import {
   insertObject,
   patchObject,
   readObjects,
+  removeCells,
 } from './doc';
-import { makeConnector, makeShape, makeSticky } from './factories';
+import { cellKey, makeChart, makeConnector, makeShape, makeSticky, makeTable } from './factories';
 import { bringToFrontKeys, compareZ, keysAbove, sendToBackKeys } from './zorder';
 
 function syncDocs(a: Y.Doc, b: Y.Doc) {
@@ -84,6 +92,49 @@ describe('doc helpers', () => {
       objects.delete(s2.id);
     });
     expect(seen).toEqual([[s1.id, s2.id].sort()]);
+  });
+});
+
+describe('tables', () => {
+  it('round-trips cells through a nested Y.Map and merges edits to different cells', () => {
+    const a = new Y.Doc();
+    const b = new Y.Doc();
+    const t = makeTable({ x: 0, y: 0 }, 'a0', 2, 2);
+    const k1 = cellKey(t.rows[0]!.id, t.columns[0]!.id);
+    const k2 = cellKey(t.rows[1]!.id, t.columns[1]!.id);
+    insertObject(getObjectsMap(a), t);
+    syncDocs(a, b);
+    expect(getObjectsMap(b).get(t.id)!.get('cells')).toBeInstanceOf(Y.Map);
+
+    patchObject(getObjectsMap(a), t.id, { cells: { [k1]: 'from A' } });
+    patchObject(getObjectsMap(b), t.id, { cells: { [k2]: 'from B' } });
+    syncDocs(a, b);
+    for (const doc of [a, b]) {
+      const read = fromYObject(getObjectsMap(doc).get(t.id)!);
+      expect(read?.type === 'table' && read.cells).toEqual({ [k1]: 'from A', [k2]: 'from B' });
+    }
+
+    removeCells(getObjectsMap(a), t.id, [k1]);
+    const read = fromYObject(getObjectsMap(a).get(t.id)!);
+    expect(read?.type === 'table' && read.cells).toEqual({ [k2]: 'from B' });
+  });
+
+  it('validates charts and tables', () => {
+    expect(BoardObject.safeParse(makeTable({ x: 0, y: 0 }, 'a0')).success).toBe(true);
+    for (const kind of CHART_KINDS) {
+      expect(BoardObject.safeParse(makeChart({ x: 0, y: 0 }, 'a0', kind)).success).toBe(true);
+    }
+    const chart = makeChart({ x: 0, y: 0 }, 'a0');
+    expect(BoardObject.safeParse({ ...chart, series: [] }).success).toBe(false);
+  });
+
+  it('accepts every shape kind and treats them all as text-bearing shapes', () => {
+    for (const kind of SHAPE_KINDS) {
+      const s = makeShape(kind, { x: 0, y: 0, w: 100, h: 100 }, 'a0');
+      expect(BoardObject.safeParse(s).success).toBe(true);
+      expect(isShapeObject(s)).toBe(true);
+      expect(hasText(s)).toBe(true);
+    }
   });
 });
 

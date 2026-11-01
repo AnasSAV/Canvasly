@@ -13,20 +13,31 @@ export type Tool =
   | 'hand'
   | 'sticky'
   | 'text'
-  | 'rect'
-  | 'ellipse'
-  | 'triangle'
+  | ShapeKind
   | 'line'
   | 'arrow'
   | 'pen'
+  | 'highlighter'
   | 'eraser'
   | 'frame'
-  | 'comment';
+  | 'comment'
+  /** Drag out the area the board should open on. */
+  | 'startview';
+
+export interface ContextMenuState {
+  /** Screen position of the menu. */
+  x: number;
+  y: number;
+  /** Where the right-click landed on the board. */
+  world: Vec;
+  /** Object under the pointer, or null for the plain board. */
+  targetId: string | null;
+}
 
 /** In-progress creation previews, drawn in the overlay layer until the gesture commits. */
 export type Draft =
-  | { kind: 'shape'; shape: ShapeKind | 'frame'; rect: Rect }
-  | { kind: 'pen'; points: number[] }
+  | { kind: 'shape'; shape: ShapeKind | 'frame' | 'startview'; rect: Rect }
+  | { kind: 'pen'; points: number[]; color: string; size: number; opacity: number }
   | { kind: 'connector'; start: ConnectorEnd; end: ConnectorEnd; arrow: boolean }
   | { kind: 'eraser'; x: number; y: number; r: number };
 
@@ -34,13 +45,23 @@ interface UIState {
   tool: Tool;
   selectedIds: string[];
   editingId: string | null;
+  editingCell: { id: string; rowId: string; colId: string } | null;
+  /** Last cell used in each table, so row/column actions know where to apply. */
+  activeCell: { id: string; rowId: string; colId: string } | null;
+  contextMenu: ContextMenuState | null;
+  /** Chart whose data is open in the editor panel. */
+  chartEditorId: string | null;
+  shortcutsOpen: boolean;
+  /** Board name is being edited in the top bar (also started from the board menu). */
+  renamingBoard: boolean;
+  /** Live width × height tag while resizing ("Show object size"). */
+  liveSize: { w: number; h: number; x: number; y: number } | null;
   /** True while a drag/resize gesture runs; hides the floating selection toolbar. */
   interacting: boolean;
   spacePan: boolean;
   panning: boolean;
   /** Shape highlighted as the attach target while drawing or re-attaching a connector. */
   attachHoverId: string | null;
-  snapToGrid: boolean;
   guides: Guide[];
   marquee: Rect | null;
   draft: Draft | null;
@@ -59,6 +80,7 @@ interface UIState {
   stickyColor: string;
   penColor: string;
   penSize: number;
+  highlightColor: string;
 
   setTool: (tool: Tool) => void;
   select: (ids: string[]) => void;
@@ -67,7 +89,11 @@ interface UIState {
   setSpacePan: (v: boolean) => void;
   setPanning: (v: boolean) => void;
   setAttachHover: (id: string | null) => void;
-  toggleSnap: () => void;
+  setEditingCell: (c: UIState['editingCell']) => void;
+  setContextMenu: (m: ContextMenuState | null) => void;
+  setChartEditor: (id: string | null) => void;
+  setShortcutsOpen: (v: boolean) => void;
+  setLiveSize: (s: UIState['liveSize']) => void;
   setGuides: (g: Guide[]) => void;
   setMarquee: (r: Rect | null) => void;
   setDraft: (d: Draft | null) => void;
@@ -82,6 +108,7 @@ interface UIState {
   setStickyColor: (c: string) => void;
   setPenColor: (c: string) => void;
   setPenSize: (s: number) => void;
+  setHighlightColor: (c: string) => void;
 }
 
 const sameIds = (a: string[], b: string[]) => a.length === b.length && a.every((id, i) => id === b[i]);
@@ -90,11 +117,17 @@ export const useUI = create<UIState>()((set, get) => ({
   tool: 'select',
   selectedIds: [],
   editingId: null,
+  editingCell: null,
+  activeCell: null,
+  contextMenu: null,
+  chartEditorId: null,
+  shortcutsOpen: false,
+  renamingBoard: false,
+  liveSize: null,
   interacting: false,
   spacePan: false,
   panning: false,
   attachHoverId: null,
-  snapToGrid: false,
   guides: [],
   marquee: null,
   draft: null,
@@ -109,8 +142,9 @@ export const useUI = create<UIState>()((set, get) => ({
   stickyColor: STICKY_COLORS[0],
   penColor: '#1a1a1a',
   penSize: 4,
+  highlightColor: '#f5d128',
 
-  setTool: (tool) => set({ tool, editingId: null, draft: null }),
+  setTool: (tool) => set({ tool, editingId: null, editingCell: null, draft: null }),
   select: (ids) => {
     if (!sameIds(get().selectedIds, ids)) set({ selectedIds: ids });
   },
@@ -121,7 +155,12 @@ export const useUI = create<UIState>()((set, get) => ({
   setAttachHover: (attachHoverId) => {
     if (get().attachHoverId !== attachHoverId) set({ attachHoverId });
   },
-  toggleSnap: () => set((s) => ({ snapToGrid: !s.snapToGrid })),
+  setEditingCell: (editingCell) =>
+    set(editingCell ? { editingCell, activeCell: editingCell } : { editingCell }),
+  setContextMenu: (contextMenu) => set({ contextMenu }),
+  setChartEditor: (chartEditorId) => set({ chartEditorId }),
+  setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),
+  setLiveSize: (liveSize) => set({ liveSize }),
   setGuides: (guides) => {
     if (guides.length || get().guides.length) set({ guides });
   },
@@ -139,4 +178,5 @@ export const useUI = create<UIState>()((set, get) => ({
   setStickyColor: (stickyColor) => set({ stickyColor }),
   setPenColor: (penColor) => set({ penColor }),
   setPenSize: (penSize) => set({ penSize }),
+  setHighlightColor: (highlightColor) => set({ highlightColor }),
 }));

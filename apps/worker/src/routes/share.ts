@@ -11,7 +11,11 @@ import {
 } from '@canvasly/shared';
 import { Hono, type Context } from 'hono';
 import { TRUSTED_HEADERS } from '../board-room/BoardRoom';
+import { boardInviteEmail, sendEmail } from '../email';
 import { boardRoom, fail, requireUser, type AppEnv, type BoardAccess } from '../http';
+
+/** Pending invites per board; caps how much email one board owner can trigger. */
+const MAX_PENDING_INVITES = 50;
 
 type AccessEnv = AppEnv & { Variables: { access: BoardAccess } };
 
@@ -84,6 +88,11 @@ export function shareRoutes(app: Hono<AccessEnv>) {
         .run();
       await boardRoom(c.env, id).setUserRole(user.id, role);
     } else {
+      const pending = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM board_invites WHERE board_id = ?')
+        .bind(id)
+        .first<{ n: number }>();
+      if ((pending?.n ?? 0) >= MAX_PENDING_INVITES)
+        return fail(c, 429, 'Too many pending invites on this board');
       await c.env.DB.prepare(
         `INSERT INTO board_invites (board_id, email, role, invited_by, created_at) VALUES (?1, ?2, ?3, ?4, ?5)
          ON CONFLICT (board_id, email) DO UPDATE SET role = ?3`,
@@ -91,9 +100,29 @@ export function shareRoutes(app: Hono<AccessEnv>) {
         .bind(id, email, role, c.get('user').id, now)
         .run();
     }
+    // Best effort: access is already granted/recorded, so a failed email doesn't fail the invite.
+    const base = c.env.BETTER_AUTH_URL;
+    const emailed = await sendEmail(
+      c.env,
+      boardInviteEmail({
+        to: email,
+        inviter: c.get('user').name,
+        title: c.get('access').title,
+        role,
+        url: user ? `${base}/b/${id}` : `${base}/`,
+        hasAccount: !!user,
+      }),
+    ).then(
+      () => true,
+      (err: unknown) => {
+        console.error('Invite email failed', err);
+        return false;
+      },
+    );
     const result: InviteResult = {
       status: user ? 'added' : 'pending',
       name: user?.name ?? null,
+      emailed: emailed && !!c.env.RESEND_API_KEY,
       settings: await loadShareSettings(c.env, id),
     };
     return c.json(result);

@@ -99,8 +99,7 @@ export class DocStore {
   getAttachTarget = (id: string): AttachTarget | undefined => {
     const o = this.objects.get(id);
     if (!o || !isBoxObject(o)) return undefined;
-    const outline = o.type === 'ellipse' ? 'ellipse' : o.type === 'triangle' ? 'triangle' : 'rect';
-    return { x: o.x, y: o.y, w: o.w, h: o.h, rotation: o.rotation, outline };
+    return { x: o.x, y: o.y, w: o.w, h: o.h, rotation: o.rotation, outline: o.type };
   };
 
   resolve = (c: Pick<ConnectorObject, 'start' | 'end' | 'routing'>): ResolvedConnector | null =>

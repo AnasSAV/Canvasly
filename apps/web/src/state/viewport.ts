@@ -1,4 +1,5 @@
 import {
+  MAX_ZOOM,
   fitRect,
   nextZoomStep,
   visibleWorldRect,
@@ -21,6 +22,8 @@ interface ViewportState {
   zoomStep: (dir: 1 | -1) => void;
   zoomTo: (zoom: number) => void;
   fit: (rect: Rect | null) => void;
+  /** Show exactly this area (start view, no padding or zoom cap). */
+  fitExact: (rect: Rect) => void;
   /** Center the camera on a world point, keeping zoom. */
   centerOn: (p: Vec) => void;
   visibleRect: () => Rect;
@@ -49,6 +52,10 @@ export const useViewport = create<ViewportState>()((set, get) => ({
       return;
     }
     set({ camera: fitRect(rect, width, height, 80, 2) });
+  },
+  fitExact: (rect) => {
+    const { width, height } = get();
+    set({ camera: fitRect(rect, width, height, 0, MAX_ZOOM) });
   },
   centerOn: (p) => {
     const { camera, width, height } = get();

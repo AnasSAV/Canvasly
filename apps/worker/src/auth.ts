@@ -1,4 +1,5 @@
 import { betterAuth } from 'better-auth';
+import { emailEnabled, resetPasswordEmail, sendEmail, verifyEmail } from './email';
 import { hashPassword, verifyPassword } from './password';
 
 function createAuth(env: Env) {
@@ -13,6 +14,9 @@ function createAuth(env: Env) {
           },
         }
       : undefined;
+  // With an email provider configured, password accounts must confirm their address before signing in.
+  // That makes emails trustworthy, so invites and Google account linking can rely on them.
+  const verify = emailEnabled(env);
   return betterAuth({
     database: env.DB,
     secret: env.BETTER_AUTH_SECRET,
@@ -23,14 +27,30 @@ function createAuth(env: Env) {
       enabled: true,
       minPasswordLength: 8,
       password: { hash: hashPassword, verify: verifyPassword },
+      requireEmailVerification: verify,
+      revokeSessionsOnPasswordReset: true,
+      sendResetPassword: async ({ user, url }) => {
+        await sendEmail(env, resetPasswordEmail(user.email, user.name, url));
+      },
+    },
+    emailVerification: {
+      sendOnSignUp: verify,
+      autoSignInAfterVerification: true,
+      sendVerificationEmail: async ({ user, url }) => {
+        await sendEmail(env, verifyEmail(user.email, user.name, url));
+      },
+      // Confirming an address claims any boards that were shared with it before the account existed.
+      afterEmailVerification: async (user) => {
+        await claimInvites(env, user.id, user.email);
+      },
     },
     socialProviders: google,
     databaseHooks: {
       user: {
         create: {
-          // Pending email invites become memberships, but only for verified emails (e.g. Google). Password
-          // sign-ups aren't verified until an email provider is configured, and anyone could register
-          // someone else's address.
+          // Pending email invites become memberships, but only for verified emails: Google accounts here,
+          // password accounts once they confirm their address (afterEmailVerification above). Otherwise
+          // anyone could register someone else's address and pick up their invites.
           after: async (user) => {
             if (!user.emailVerified) return;
             await claimInvites(env, user.id, user.email);

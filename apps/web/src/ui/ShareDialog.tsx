@@ -56,12 +56,13 @@ export function ShareDialog({ boardId, onClose }: { boardId: string; onClose: ()
       const res = await api.invite(boardId, email, role);
       setSettings(res.settings);
       setEmail('');
+      const sent = res.emailed ? ' We emailed them a link.' : '';
       setMessage(
         res.status === 'added'
-          ? { kind: 'ok', text: `Added ${res.name} as ${role}.` }
+          ? { kind: 'ok', text: `Added ${res.name} as ${role}.${sent}` }
           : {
               kind: 'ok',
-              text: `No account for ${email} yet. Access is granted automatically when they sign in with a verified (Google) account — or send them the link below.`,
+              text: `No account for ${email} yet.${sent} They get access after signing up and confirming that email address — or send them the link below.`,
             },
       );
     } catch (err) {

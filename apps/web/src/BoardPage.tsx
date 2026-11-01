@@ -7,7 +7,7 @@ import { exposeForDebugging } from './debug';
 import { createActions } from './doc/actions';
 import { Board } from './doc/board';
 import { BoardContext } from './doc/context';
-import { contentBounds } from './doc/ops';
+import { contentBounds, getStartView } from './doc/ops';
 import { useFollow, usePresencePublisher } from './hooks/usePresence';
 import { useShortcuts } from './hooks/useShortcuts';
 import { useThumbnailUploader } from './hooks/useThumbnailUploader';
@@ -17,11 +17,14 @@ import { Link, navigate } from './lib/router';
 import { AuthPage } from './pages/AuthPage';
 import { useUI } from './state/ui';
 import { useViewport } from './state/viewport';
+import { ChartEditor } from './ui/ChartEditor';
 import { CommentsLayer, CommentsPanel } from './ui/Comments';
+import { ContextMenu } from './ui/ContextMenu';
 import { FramesPanel, Presentation } from './ui/Frames';
 import { FollowBanner, RemoteCursors } from './ui/Presence';
-import { SelectionToolbar } from './ui/SelectionToolbar';
+import { ObjectSizeTag, SelectionToolbar } from './ui/SelectionToolbar';
 import { ShareDialog } from './ui/ShareDialog';
+import { ShortcutsDialog } from './ui/ShortcutsDialog';
 import { Toolbar } from './ui/Toolbar';
 import { TopBar } from './ui/TopBar';
 import { ZoomControls } from './ui/ZoomControls';
@@ -267,6 +270,11 @@ function BoardView({
     useUI.setState({
       selectedIds: [],
       editingId: null,
+      editingCell: null,
+      activeCell: null,
+      contextMenu: null,
+      chartEditorId: null,
+      renamingBoard: false,
       tool: 'select',
       draft: null,
       followingClientId: null,
@@ -303,7 +311,9 @@ function BoardView({
   useEffect(() => {
     if (framed.current || !width) return;
     framed.current = true;
-    useViewport.getState().fit(contentBounds(board.store));
+    const start = getStartView(board);
+    if (start) useViewport.getState().fitExact(start);
+    else useViewport.getState().fit(contentBounds(board.store));
   }, [board, width]);
 
   if (status === 'denied') {
@@ -347,12 +357,16 @@ function BoardView({
             beforeLeave={flushThumbnail}
             onShare={() => setShareOpen(true)}
           />
-          <Toolbar onImage={openImagePicker} />
+          <Toolbar onImage={openImagePicker} actions={actions} />
           <SelectionToolbar actions={actions} />
+          <ObjectSizeTag />
           <ZoomControls onFit={actions.zoomToFit} />
           <Minimap />
           <CommentsPanel />
           <FramesPanel />
+          <ChartEditor />
+          <ContextMenu actions={actions} title={meta.title} />
+          <ShortcutsDialog />
         </>
       )}
       {shareOpen && <ShareDialog boardId={meta.id} onClose={() => setShareOpen(false)} />}

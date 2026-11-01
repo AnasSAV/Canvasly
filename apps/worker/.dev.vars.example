@@ -6,3 +6,7 @@ BETTER_AUTH_URL=http://localhost:5173
 # Optional: enables "Continue with Google". Redirect URI: <BETTER_AUTH_URL>/api/auth/callback/google
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
+# Optional: send real email through Resend (otherwise emails are printed to the wrangler log and
+# email verification stays off). EMAIL_FROM must use a domain verified in Resend.
+RESEND_API_KEY=
+EMAIL_FROM=Canvasly <onboarding@resend.dev>

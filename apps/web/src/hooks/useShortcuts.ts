@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { isEditableTarget } from '../canvas/interactions';
 import type { Actions } from '../doc/actions';
+import { usePrefs } from '../state/prefs';
 import { useUI, type Tool } from '../state/ui';
 import { useViewport } from '../state/viewport';
 
@@ -58,7 +59,16 @@ export function useShortcuts(actions: Actions, openImagePicker: () => void) {
         if (handled !== 'unhandled') e.preventDefault();
         return;
       }
-      if (e.altKey) return;
+      if (e.altKey) {
+        if (e.code === 'Digit1') {
+          e.preventDefault();
+          actions.showAll();
+        }
+        return;
+      }
+      if (e.key === '?') return ui.setShortcutsOpen(true);
+      if (e.shiftKey && key === 'c') return usePrefs.getState().toggle('showComments');
+      if (!e.shiftKey && key === 'g') return usePrefs.getState().toggle('showGrid');
 
       if (e.shiftKey && e.code === 'Digit1') return actions.zoomToFit();
       if (e.shiftKey && e.code === 'Digit0') return vp.zoomTo(1);
@@ -77,7 +87,7 @@ export function useShortcuts(actions: Actions, openImagePicker: () => void) {
         case 'Enter': {
           if (ui.selectedIds.length === 1 && !ui.readOnly) {
             e.preventDefault();
-            ui.setEditing(ui.selectedIds[0]!);
+            actions.editSelected();
           }
           return;
         }

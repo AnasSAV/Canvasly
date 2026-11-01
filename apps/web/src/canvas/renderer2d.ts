@@ -1,6 +1,7 @@
 import {
   MAX_THUMBNAIL_BYTES,
   isShapeObject,
+  shapeTextBox,
   toRad,
   wrapText,
   type BoardObject,
@@ -9,6 +10,8 @@ import {
 import { assetUrl, getLoadedImage, loadImage } from '../doc/assets';
 import type { DocStore } from '../doc/store';
 import { freehandPath } from './freehand';
+import { traceShape } from './shapePaths';
+import { drawChart, drawTable } from './widgets';
 import { FONT_FAMILY, LINE_HEIGHT, SHAPE_PADDING, STICKY_PADDING, autoFontSize, measureText } from './text';
 
 /**
@@ -118,7 +121,14 @@ function drawObject(ctx: CanvasRenderingContext2D, o: BoardObject, store: DocSto
       break;
     case 'pen':
       ctx.fillStyle = o.stroke;
+      ctx.globalAlpha = o.opacity;
       ctx.fill(new Path2D(freehandPath(o.points, o.size)));
+      break;
+    case 'table':
+      drawTable(ctx, o, { dark: false });
+      break;
+    case 'chart':
+      drawChart(ctx, o, { dark: false });
       break;
     case 'image': {
       const img = getLoadedImage(assetUrl(assetBase, o.assetId));
@@ -132,14 +142,7 @@ function drawObject(ctx: CanvasRenderingContext2D, o: BoardObject, store: DocSto
     default: {
       if (!isShapeObject(o)) break;
       ctx.beginPath();
-      if (o.type === 'rect') ctx.roundRect(0, 0, o.w, o.h, 4);
-      else if (o.type === 'ellipse') ctx.ellipse(o.w / 2, o.h / 2, o.w / 2, o.h / 2, 0, 0, Math.PI * 2);
-      else {
-        ctx.moveTo(o.w / 2, 0);
-        ctx.lineTo(o.w, o.h);
-        ctx.lineTo(0, o.h);
-        ctx.closePath();
-      }
+      traceShape(ctx, o.type, o.w, o.h);
       if (o.fill !== 'transparent') {
         ctx.fillStyle = o.fill;
         ctx.fill();
@@ -151,12 +154,8 @@ function drawObject(ctx: CanvasRenderingContext2D, o: BoardObject, store: DocSto
         ctx.stroke();
       }
       ctx.fillStyle = o.textColor;
-      const p = SHAPE_PADDING;
-      const box =
-        o.type === 'triangle'
-          ? { x: p, y: o.h * 0.35, w: o.w - p * 2, h: o.h * 0.65 - p }
-          : { x: p, y: p, w: o.w - p * 2, h: o.h - p * 2 };
-      drawText(ctx, o.text, box, Math.min(autoFontSize(o.text, o.w, o.h, p), 28), 'center', true);
+      const box = shapeTextBox(o.type, o.w, o.h, SHAPE_PADDING);
+      drawText(ctx, o.text, box, Math.min(autoFontSize(o.text, box.w, box.h, 0), 28), 'center', true);
     }
   }
   ctx.restore();

@@ -1,21 +1,32 @@
+import { cellKey, shapeTextBox } from '@canvasly/shared';
 import type {
   BoardObject,
+  ChartObject,
   ConnectorObject,
   FrameObject,
   ImageObject,
   PenObject,
   ShapeObject,
   StickyObject,
+  TableObject,
   TextObject,
 } from '@canvasly/shared';
+import type { Context } from 'konva/lib/Context';
+import type { Shape as KonvaShape } from 'konva/lib/Shape';
 import { memo, useMemo } from 'react';
-import { Arrow, Ellipse, Group, Image as KImage, Line, Path, Rect, Text } from 'react-konva';
+import { Arrow, Group, Image as KImage, Line, Path, Rect, Shape as KShape, Text } from 'react-konva';
 import { useAssetImage } from '../doc/assets';
 import { useBoard } from '../doc/context';
+import { useUI } from '../state/ui';
 import { useViewport } from '../state/viewport';
 import { canvasColors, ink, paper } from './colors';
 import { freehandPath } from './freehand';
+import { traceShape } from './shapePaths';
 import { FONT_FAMILY, LINE_HEIGHT, SHAPE_PADDING, STICKY_PADDING, autoFontSize } from './text';
+import { drawChart, drawTable } from './widgets';
+
+/** Konva's context wrapper around the native 2D context, for drawing code shared with exports. */
+const native = (c: Context) => (c as unknown as { _context: CanvasRenderingContext2D })._context;
 
 /** Common props for the root group of every box object; the id lets the Transformer find the node. */
 function boxGroupProps(o: Exclude<BoardObject, ConnectorObject>) {
@@ -88,37 +99,36 @@ const TextNode = ({ o, editing, dark }: { o: TextObject } & DetailProps) => (
 );
 
 const Shape = ({ o, editing, lowDetail, dark }: { o: ShapeObject } & DetailProps) => {
-  const fill = o.fill === 'transparent' ? undefined : paper(o.fill, dark);
-  const stroke = o.stroke === 'transparent' ? undefined : ink(o.stroke, dark);
-  const common = {
-    fill,
-    stroke,
-    strokeWidth: o.strokeWidth,
-    perfectDrawEnabled: false,
-    strokeScaleEnabled: false,
-  };
   const showText = !editing && !lowDetail && o.text;
-  const fontSize = showText ? autoFontSize(o.text, o.w, o.h, SHAPE_PADDING) : 0;
+  const box = shapeTextBox(o.type, o.w, o.h, SHAPE_PADDING);
+  const fontSize = showText ? Math.min(autoFontSize(o.text, box.w, box.h, 0), 28) : 0;
   // Text on a light custom fill stays dark; on the default (or transparent) fill it follows the theme.
   const textColor =
     o.fill === 'transparent' || o.fill.toLowerCase() === '#ffffff' ? ink(o.textColor, dark) : o.textColor;
   return (
     <Group {...boxGroupProps(o)}>
-      {o.type === 'rect' && <Rect width={o.w} height={o.h} cornerRadius={4} {...common} />}
-      {o.type === 'ellipse' && (
-        <Ellipse x={o.w / 2} y={o.h / 2} radiusX={o.w / 2} radiusY={o.h / 2} {...common} />
-      )}
-      {o.type === 'triangle' && (
-        <Line points={[o.w / 2, 0, o.w, o.h, 0, o.h]} closed lineJoin="round" {...common} />
-      )}
+      <KShape
+        width={o.w}
+        height={o.h}
+        fill={o.fill === 'transparent' ? undefined : paper(o.fill, dark)}
+        stroke={o.stroke === 'transparent' ? undefined : ink(o.stroke, dark)}
+        strokeWidth={o.strokeWidth}
+        strokeScaleEnabled={false}
+        perfectDrawEnabled={false}
+        sceneFunc={(c: Context, shape: KonvaShape) => {
+          c.beginPath();
+          traceShape(native(c), o.type, o.w, o.h);
+          c.fillStrokeShape(shape);
+        }}
+      />
       {showText && (
         <Text
-          x={SHAPE_PADDING}
-          y={o.type === 'triangle' ? o.h * 0.35 : SHAPE_PADDING}
-          width={o.w - SHAPE_PADDING * 2}
-          height={o.type === 'triangle' ? o.h * 0.65 - SHAPE_PADDING : o.h - SHAPE_PADDING * 2}
+          x={box.x}
+          y={box.y}
+          width={box.w}
+          height={box.h}
           text={o.text}
-          fontSize={Math.min(fontSize, 28)}
+          fontSize={fontSize}
           fontFamily={FONT_FAMILY}
           lineHeight={LINE_HEIGHT}
           fill={textColor}
@@ -137,7 +147,7 @@ const Pen = ({ o, dark }: { o: PenObject } & DetailProps) => {
   return (
     <Group {...boxGroupProps(o)}>
       <Rect width={o.w} height={o.h} fill="transparent" />
-      <Path data={data} fill={ink(o.stroke, dark)} perfectDrawEnabled={false} />
+      <Path data={data} fill={ink(o.stroke, dark)} opacity={o.opacity} perfectDrawEnabled={false} />
     </Group>
   );
 };
@@ -161,6 +171,32 @@ const ImageNode = ({ o }: { o: ImageObject }) => {
     </Group>
   );
 };
+
+const TableNode = ({ o, lowDetail, dark }: { o: TableObject } & DetailProps) => {
+  const editing = useUI((s) => (s.editingCell?.id === o.id ? s.editingCell : null));
+  const hideCell = editing ? cellKey(editing.rowId, editing.colId) : null;
+  return (
+    <Group {...boxGroupProps(o)}>
+      <KShape
+        width={o.w}
+        height={o.h}
+        perfectDrawEnabled={false}
+        sceneFunc={(c: Context) => drawTable(native(c), o, { dark, lowDetail, hideCell })}
+      />
+    </Group>
+  );
+};
+
+const ChartNode = ({ o, dark }: { o: ChartObject } & DetailProps) => (
+  <Group {...boxGroupProps(o)}>
+    <KShape
+      width={o.w}
+      height={o.h}
+      perfectDrawEnabled={false}
+      sceneFunc={(c: Context) => drawChart(native(c), o, { dark })}
+    />
+  </Group>
+);
 
 /**
  * Frame background + border. The title is a sibling (not inside the group) so it doesn't count toward
@@ -251,15 +287,17 @@ export const ObjectNode = memo(function ObjectNode(
       return <Sticky {...props} o={o} />;
     case 'text':
       return <TextNode {...props} o={o} />;
-    case 'rect':
-    case 'ellipse':
-    case 'triangle':
-      return <Shape {...props} o={o} />;
     case 'pen':
       return <Pen {...props} o={o} />;
     case 'image':
       return <ImageNode o={o} />;
     case 'frame':
       return <Frame {...props} o={o} />;
+    case 'table':
+      return <TableNode {...props} o={o} />;
+    case 'chart':
+      return <ChartNode {...props} o={o} />;
+    default:
+      return <Shape {...props} o={o} />;
   }
 });

@@ -18,8 +18,10 @@ export default defineConfig({
   },
   webServer: [
     {
-      // Worker + D1 + Durable Objects, all local (state in apps/worker/.wrangler).
-      command: `pnpm --filter @canvasly/worker db:migrate:local && pnpm --filter @canvasly/worker exec wrangler dev --port ${WORKER_PORT} --var BETTER_AUTH_URL:${origin}`,
+      // Worker + D1 + Durable Objects, all local (state in apps/worker/.wrangler). Origin inference is off so
+      // the production route in wrangler.jsonc does not rewrite the local Origin/Host.
+      // predev creates the assets dir and .dev.vars on a fresh checkout (CI), then migrations run.
+      command: `pnpm --filter @canvasly/worker exec node scripts/predev.mjs && pnpm --filter @canvasly/worker db:migrate:local && pnpm --filter @canvasly/worker exec wrangler dev --port ${WORKER_PORT} --infer-origin-from-routes=false --var BETTER_AUTH_URL:${origin}`,
       cwd: '../..',
       url: `http://127.0.0.1:${WORKER_PORT}/api/health`,
       env: { CI: '1' }, // non-interactive migrations

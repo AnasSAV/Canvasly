@@ -8,6 +8,7 @@ export * from './protocol';
 export * from './presence';
 export * from './geometry/vec';
 export * from './geometry/box';
+export * from './geometry/shapes';
 export * from './geometry/connectors';
 export * from './geometry/snap';
 export * from './geometry/viewport';

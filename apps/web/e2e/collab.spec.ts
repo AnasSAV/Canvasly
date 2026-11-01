@@ -77,7 +77,9 @@ test('two browsers edit the same board live', async ({ browser }) => {
   await a.getByTestId('presence-avatar').nth(1).click();
   await expect(a.getByTestId('follow-banner')).toBeVisible();
   await b.mouse.move(700, 500);
-  await b.mouse.wheel(400, 300);
+  await b.mouse.down({ button: 'right' });
+  await b.mouse.move(400, 300, { steps: 5 });
+  await b.mouse.up({ button: 'right' });
   await expect
     .poll(async () => {
       const [ra, rb] = await Promise.all([visibleRect(a), visibleRect(b)]);

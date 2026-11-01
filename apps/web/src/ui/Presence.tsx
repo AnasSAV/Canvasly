@@ -2,9 +2,9 @@ import { worldToScreen } from '@canvasly/shared';
 import { useBoard } from '../doc/context';
 import type { Peer } from '../doc/presence';
 import { usePeers } from '../hooks/usePresence';
+import { usePrefs } from '../state/prefs';
 import { useUI } from '../state/ui';
 import { useViewport } from '../state/viewport';
-import { panel } from './IconButton';
 
 const initials = (name: string) =>
   name
@@ -19,6 +19,7 @@ export function RemoteCursors() {
   const board = useBoard();
   const peers = usePeers(board);
   const camera = useViewport((s) => s.camera);
+  const reduceMotion = usePrefs((s) => s.reduceMotion);
   return (
     <div className="pointer-events-none absolute inset-0 z-[5] overflow-hidden" aria-hidden>
       {peers.map((p) => {
@@ -29,7 +30,10 @@ export function RemoteCursors() {
             key={p.clientId}
             className="absolute top-0 left-0"
             // Updates arrive ~20×/s; a short transition makes motion look continuous.
-            style={{ transform: `translate(${s.x}px, ${s.y}px)`, transition: 'transform 80ms linear' }}
+            style={{
+              transform: `translate(${s.x}px, ${s.y}px)`,
+              transition: reduceMotion ? undefined : 'transform 80ms linear',
+            }}
             data-testid="remote-cursor"
           >
             <svg width="18" height="18" viewBox="0 0 18 18" className="drop-shadow-sm">
@@ -96,7 +100,7 @@ export function PresenceAvatars() {
   const shown = others.slice(0, 5);
 
   return (
-    <div className={`${panel} flex h-11 items-center gap-1 px-2`} data-testid="presence">
+    <div className="flex items-center gap-1 px-1" data-testid="presence">
       <Avatar
         name={board.presence.user.name}
         color={board.presence.color}

@@ -20,7 +20,9 @@ export function toYObject(obj: BoardObject): YObject {
   const m = new Y.Map<unknown>();
   for (const [k, v] of Object.entries(obj)) {
     if (v === undefined) continue;
-    m.set(k, k === 'text' && typeof v === 'string' ? new Y.Text(v) : v);
+    if (k === 'text' && typeof v === 'string') m.set(k, new Y.Text(v));
+    else if (k === 'cells') m.set(k, new Y.Map(Object.entries(v as Record<string, string>)));
+    else m.set(k, v);
   }
   return m;
 }
@@ -67,11 +69,22 @@ export function patchObject(objects: YObjects, id: string, patch: ObjectPatch): 
     const cur = m.get(k);
     if (cur instanceof Y.Text && typeof v === 'string') {
       applyTextDiff(cur, v);
+    } else if (cur instanceof Y.Map && k === 'cells') {
+      // Cells merge key by key; removing rows and columns goes through removeCells().
+      for (const [key, text] of Object.entries(v as Record<string, string>)) {
+        if (cur.get(key) !== text) cur.set(key, text);
+      }
     } else if (!sameValue(cur, v)) {
       m.set(k, k === 'text' && typeof v === 'string' ? new Y.Text(v) : v);
     }
   }
   return true;
+}
+
+/** Delete table cells, e.g. when their row or column is removed. */
+export function removeCells(objects: YObjects, id: string, keys: Iterable<string>): void {
+  const cells = objects.get(id)?.get('cells');
+  if (cells instanceof Y.Map) for (const key of keys) cells.delete(key);
 }
 
 export function readObjects(objects: YObjects): BoardObject[] {

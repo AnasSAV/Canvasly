@@ -3,6 +3,7 @@ import { Check, MessageSquare, RotateCcw, Send, Trash, X } from 'lucide-react';
 import { useState, useSyncExternalStore, type ReactNode } from 'react';
 import type { Board } from '../doc/board';
 import { useBoard } from '../doc/context';
+import { usePrefs } from '../state/prefs';
 import { useUI } from '../state/ui';
 import { useViewport } from '../state/viewport';
 import { panel } from './IconButton';
@@ -188,9 +189,10 @@ export function CommentsLayer() {
   const camera = useViewport((s) => s.camera);
   const { showResolved, openThreadId, commentDraft, presenting, setOpenThread, setCommentDraft, setTool } =
     useUI();
+  const showPins = usePrefs((s) => s.showComments);
   if (presenting !== null) return null;
   const open = threads.find((t) => t.id === openThreadId);
-  const visible = threads.filter((t) => !t.resolved || showResolved || t.id === openThreadId);
+  const visible = showPins ? threads.filter((t) => !t.resolved || showResolved || t.id === openThreadId) : [];
 
   return (
     <div className="pointer-events-none absolute inset-0 z-[6] overflow-hidden">
@@ -266,7 +268,7 @@ export function CommentsPanel() {
     .sort((a, b) => Number(a.resolved) - Number(b.resolved));
   return (
     <aside
-      className={`${panel} absolute top-16 right-3 bottom-3 z-20 flex w-80 max-w-[calc(100%-1.5rem)] flex-col`}
+      className={`${panel} absolute top-[72px] right-3 bottom-16 z-20 flex w-80 max-w-[calc(100%-1.5rem)] flex-col`}
       data-testid="comments-panel"
     >
       <div className="flex items-center gap-2 border-b border-gray-200 px-3 py-2.5 dark:border-zinc-700">

@@ -13,7 +13,7 @@ export function IconButton({ label, active, children, className = '', ...rest }:
       title={label}
       aria-label={label}
       aria-pressed={active}
-      className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors disabled:opacity-35 ${
+      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors disabled:opacity-35 ${
         active
           ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300'
           : 'text-gray-700 hover:bg-gray-100 dark:text-zinc-300 dark:hover:bg-zinc-800'
@@ -26,7 +26,7 @@ export function IconButton({ label, active, children, className = '', ...rest }:
 }
 
 export const panel =
-  'rounded-xl border border-gray-200 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.08)] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100';
+  'rounded-xl bg-white shadow-[0_1px_8px_rgba(5,0,56,0.14)] dark:bg-zinc-900 dark:text-zinc-100 dark:shadow-[0_1px_8px_rgba(0,0,0,0.5)]';
 
 export function Swatch({ color, active, onClick }: { color: string; active?: boolean; onClick: () => void }) {
   return (

@@ -15,28 +15,43 @@ import {
   DEFAULT_FRAME_SIZE,
   snapRect,
   snapToGrid,
-  DEFAULT_SHAPE_SIZE,
+  SHAPE_KINDS,
+  worldToLocal,
   STICKY_SIZE,
   type BoardObject,
   type Camera,
   type ConnectorEnd,
+  type Guide,
   type Rect,
   type ShapeKind,
   type Vec,
 } from '@canvasly/shared';
 import Konva from 'konva';
 import type { Board } from '../doc/board';
-import { addObjects, deleteObjects, expandGroups, moveFrom, nextZ, patch, selectionBounds } from '../doc/ops';
+import {
+  addObjects,
+  deleteObjects,
+  expandGroups,
+  moveFrom,
+  nextZ,
+  patch,
+  selectionBounds,
+  setStartView,
+} from '../doc/ops';
+import { usePrefs } from '../state/prefs';
 import { useUI } from '../state/ui';
 import { useViewport } from '../state/viewport';
 import { hitTest } from './hitTest';
+import { defaultShapeSize } from './shapePaths';
+import { cellAt } from './widgets';
 
 export const GRID_SIZE = 20;
 const DRAG_THRESHOLD = 4; // screen px
 const SNAP_DISTANCE = 6; // screen px
 
 type Gesture =
-  | { kind: 'pan'; last: Vec }
+  /** `rightClick`: started with the right button; releasing without moving opens the context menu. */
+  | { kind: 'pan'; last: Vec; rightClick?: { start: Vec; world: Vec } }
   | {
       kind: 'move';
       startScreen: Vec;
@@ -50,14 +65,16 @@ type Gesture =
       wasSelected: boolean;
     }
   | { kind: 'marquee'; start: Vec; startScreen: Vec; base: string[] }
-  | { kind: 'shape'; shape: ShapeKind | 'frame'; start: Vec }
-  | { kind: 'pen'; points: number[] }
+  | { kind: 'shape'; shape: ShapeKind | 'frame' | 'startview'; start: Vec }
+  | { kind: 'pen'; points: number[]; color: string; size: number; opacity: number }
   | { kind: 'connector'; start: ConnectorEnd; startScreen: Vec; arrow: boolean }
   | { kind: 'reattach'; id: string; which: 'start' | 'end'; started: boolean; startScreen: Vec }
   | { kind: 'eraser' }
   | { kind: 'pinch'; startDist: number; startMid: Vec; startCam: Camera };
 
 const DOUBLE_TAP_MS = 300;
+
+const isShapeTool = (t: string): t is ShapeKind => (SHAPE_KINDS as readonly string[]).includes(t);
 
 const ui = () => useUI.getState();
 const vp = () => useViewport.getState();
@@ -124,7 +141,9 @@ export class Interactions {
     return screenToWorld(vp().camera, this.screen(e));
   }
   private snapPoint(p: Vec): Vec {
-    return ui().snapToGrid ? { x: snapToGrid(p.x, GRID_SIZE), y: snapToGrid(p.y, GRID_SIZE) } : p;
+    return usePrefs.getState().snapToGrid
+      ? { x: snapToGrid(p.x, GRID_SIZE), y: snapToGrid(p.y, GRID_SIZE) }
+      : p;
   }
   /** Run `fn` on the next animation frame, replacing any not-yet-run scheduled work. */
   private schedule(fn: () => void) {
@@ -194,10 +213,26 @@ export class Interactions {
     const u = ui();
     if (u.tool !== 'select' || this.board.readOnly) return;
     const hit = hitTest(this.board.store, p, 2 / vp().camera.zoom);
-    if (hit && hasText(hit) && !hit.locked) {
+    if (!hit || hit.locked) return;
+    if (hasText(hit)) {
       u.select([hit.id]);
       u.setEditing(hit.id);
+    } else if (hit.type === 'table') {
+      const cell = cellAt(hit, worldToLocal(hit, p));
+      u.select([hit.id]);
+      if (cell) u.setEditingCell({ id: hit.id, ...cell });
+    } else if (hit.type === 'chart') {
+      u.select([hit.id]);
+      u.setChartEditor(hit.id);
     }
+  }
+
+  /** Right-click without dragging: select what's under the pointer and open the menu there. */
+  private openContextMenu(screen: Vec, world: Vec) {
+    const u = ui();
+    const hit = hitTest(this.board.store, world, 2 / vp().camera.zoom);
+    if (hit && !u.selectedIds.includes(hit.id)) u.select(expandGroups(this.board.store, [hit.id]));
+    u.setContextMenu({ x: screen.x, y: screen.y, world, targetId: hit?.id ?? null });
   }
 
   private finishCreate(o: BoardObject, edit: boolean) {
@@ -228,6 +263,7 @@ export class Interactions {
     const p = this.world(e);
     this.lastWorld = p;
     if (u.editingId) u.setEditing(null);
+    if (u.editingCell) u.setEditingCell(null);
 
     // Overlay widgets drawn by Konva take precedence.
     const node = this.getStage()?.getIntersection(screen);
@@ -244,11 +280,13 @@ export class Interactions {
     // above still need the native mousedown, which this would suppress.
     e.preventDefault();
 
-    // Middle mouse, Space/hand tool, or right-drag on empty board pans.
-    const rightOnEmpty = e.button === 2 && !hitTest(this.board.store, p, 2 / vp().camera.zoom);
-    if (e.button === 1 || rightOnEmpty || (e.button === 0 && (u.spacePan || u.tool === 'hand'))) {
-      this.g = { kind: 'pan', last: screen };
-      u.setPanning(true);
+    // Middle mouse, Space/hand tool or right-drag pans. A right-click that doesn't drag opens the menu.
+    if (e.button === 2 || e.button === 1 || (e.button === 0 && (u.spacePan || u.tool === 'hand'))) {
+      this.g =
+        e.button === 2
+          ? { kind: 'pan', last: screen, rightClick: { start: screen, world: p } }
+          : { kind: 'pan', last: screen };
+      u.setPanning(e.button !== 2);
       this.el.setPointerCapture(e.pointerId);
       return;
     }
@@ -258,6 +296,11 @@ export class Interactions {
     const zoom = vp().camera.zoom;
     const readOnly = this.board.readOnly;
     if (readOnly && u.tool !== 'select' && u.tool !== 'comment') return;
+    if (isShapeTool(u.tool)) {
+      this.g = { kind: 'shape', shape: u.tool, start: this.snapPoint(p) };
+      this.el.setPointerCapture(e.pointerId);
+      return;
+    }
     switch (u.tool) {
       case 'select': {
         const hit = hitTest(store, p, (e.pointerType === 'touch' ? 8 : 2) / zoom);
@@ -294,10 +337,8 @@ export class Interactions {
         };
         break;
       }
-      case 'rect':
-      case 'ellipse':
-      case 'triangle':
       case 'frame':
+      case 'startview':
         this.g = { kind: 'shape', shape: u.tool, start: this.snapPoint(p) };
         break;
       case 'comment':
@@ -314,10 +355,16 @@ export class Interactions {
         return;
       }
       case 'pen':
+      case 'highlighter': {
         this.board.beginGesture();
-        this.g = { kind: 'pen', points: [p.x, p.y] };
-        u.setDraft({ kind: 'pen', points: [p.x, p.y] });
+        const stroke =
+          u.tool === 'pen'
+            ? { color: u.penColor, size: u.penSize, opacity: 1 }
+            : { color: u.highlightColor, size: 24, opacity: 0.4 };
+        this.g = { kind: 'pen', points: [p.x, p.y], ...stroke };
+        u.setDraft({ kind: 'pen', points: [p.x, p.y], ...stroke });
         break;
+      }
       case 'line':
       case 'arrow':
         this.g = {
@@ -364,6 +411,13 @@ export class Interactions {
 
     switch (g.kind) {
       case 'pan': {
+        // Tiny movements during a right-click shouldn't cancel the menu.
+        if (g.rightClick && dist(screen, g.rightClick.start) < DRAG_THRESHOLD) return;
+        if (g.rightClick) {
+          g.last = g.rightClick.start;
+          g.rightClick = undefined;
+          u.setPanning(true);
+        }
         vp().panBy(screen.x - g.last.x, screen.y - g.last.y);
         g.last = screen;
         break;
@@ -395,19 +449,22 @@ export class Interactions {
         }
         let dx = p.x - g.startWorld.x;
         let dy = p.y - g.startWorld.y;
+        const prefs = usePrefs.getState();
+        let guides: Guide[] = [];
         if (g.startBounds && !e.altKey) {
           const moved = { ...g.startBounds, x: g.startBounds.x + dx, y: g.startBounds.y + dy };
-          const snap = snapRect(moved, g.targets, SNAP_DISTANCE / zoom);
+          const snap = prefs.snapObjects
+            ? snapRect(moved, g.targets, SNAP_DISTANCE / zoom)
+            : { dx: 0, dy: 0, guides: [] };
           dx += snap.dx;
           dy += snap.dy;
-          if (u.snapToGrid) {
+          guides = snap.guides;
+          if (prefs.snapToGrid) {
             if (snap.dx === 0) dx += snapToGrid(moved.x, GRID_SIZE) - moved.x;
             if (snap.dy === 0) dy += snapToGrid(moved.y, GRID_SIZE) - moved.y;
           }
-          u.setGuides(snap.guides);
-        } else {
-          u.setGuides([]);
         }
+        u.setGuides(guides);
         const origins = g.origins;
         this.schedule(() => moveFrom(this.board, origins, dx, dy));
         break;
@@ -432,15 +489,20 @@ export class Interactions {
       case 'shape': {
         const end = this.snapPoint(p);
         let rect = rectFromPoints(g.start, end);
-        if (e.shiftKey && g.shape !== 'frame') {
+        if (e.shiftKey && g.shape !== 'frame' && g.shape !== 'startview') {
           const s = Math.max(rect.w, rect.h);
-          rect = {
-            x: end.x < g.start.x ? g.start.x - s : g.start.x,
-            y: end.y < g.start.y ? g.start.y - s : g.start.y,
-            w: s,
-            h: s,
-          };
+          rect = { ...rect, w: s, h: s };
+        } else if (isShapeTool(g.shape) && usePrefs.getState().suggestObjectSize) {
+          // Suggest object size: lock onto the size of an existing shape of the same kind.
+          const threshold = SNAP_DISTANCE / zoom;
+          for (const o of this.board.store.all()) {
+            if (o.type !== g.shape) continue;
+            if (Math.abs(rect.w - o.w) < threshold) rect = { ...rect, w: o.w };
+            if (Math.abs(rect.h - o.h) < threshold) rect = { ...rect, h: o.h };
+          }
         }
+        if (end.x < g.start.x) rect = { ...rect, x: g.start.x - rect.w };
+        if (end.y < g.start.y) rect = { ...rect, y: g.start.y - rect.h };
         u.setDraft({ kind: 'shape', shape: g.shape, rect });
         break;
       }
@@ -453,7 +515,8 @@ export class Interactions {
             g.points.push(wp.x, wp.y);
         }
         const points = g.points;
-        this.schedule(() => ui().setDraft({ kind: 'pen', points: [...points] }));
+        const { color, size, opacity } = g;
+        this.schedule(() => ui().setDraft({ kind: 'pen', points: [...points], color, size, opacity }));
         break;
       }
       case 'connector': {
@@ -516,6 +579,8 @@ export class Interactions {
     switch (g.kind) {
       case 'pan':
         u.setPanning(false);
+        if (g.rightClick && e.type === 'pointerup')
+          this.openContextMenu(g.rightClick.start, g.rightClick.world);
         break;
       case 'move': {
         if (g.started) {
@@ -537,13 +602,14 @@ export class Interactions {
         u.setDraft(null);
         const zoom = vp().camera.zoom;
         let rect = draft?.kind === 'shape' ? draft.rect : null;
-        if (!rect || (rect.w * zoom < DRAG_THRESHOLD && rect.h * zoom < DRAG_THRESHOLD)) {
-          const { w, h } =
-            g.shape === 'frame'
-              ? DEFAULT_FRAME_SIZE
-              : g.shape === 'rect'
-                ? DEFAULT_SHAPE_SIZE
-                : { w: 120, h: 120 };
+        const tiny = !rect || (rect.w * zoom < DRAG_THRESHOLD && rect.h * zoom < DRAG_THRESHOLD);
+        if (g.shape === 'startview') {
+          u.setTool('select');
+          if (rect && !tiny) setStartView(this.board, rect);
+          break;
+        }
+        if (!rect || tiny) {
+          const { w, h } = g.shape === 'frame' ? DEFAULT_FRAME_SIZE : defaultShapeSize(g.shape);
           rect = { x: g.start.x - w / 2, y: g.start.y - h / 2, w, h };
         }
         rect = { ...rect, w: Math.max(rect.w, 8), h: Math.max(rect.h, 8) };
@@ -558,7 +624,7 @@ export class Interactions {
       case 'pen': {
         u.setDraft(null);
         const pts = g.points.length === 2 ? [...g.points, g.points[0]! + 0.5, g.points[1]! + 0.5] : g.points;
-        addObjects(this.board, [makePen(pts, nextZ(store), u.penColor, u.penSize)]);
+        addObjects(this.board, [makePen(pts, nextZ(store), g.color, g.size, g.opacity)]);
         this.board.endGesture();
         break;
       }
@@ -612,10 +678,13 @@ export class Interactions {
     e.preventDefault();
     const v = vp();
     const lineScale = e.deltaMode === 1 ? 20 : 1;
-    if (e.ctrlKey || e.metaKey) {
-      // Trackpad pinch arrives as ctrl+wheel with small deltas; clamp so mouse wheels don't jump.
-      const delta = Math.max(-60, Math.min(60, e.deltaY * lineScale));
-      v.zoomAtPoint(this.screen(e), v.camera.zoom * Math.exp(-delta * 0.01));
+    const mouseMode = usePrefs.getState().navMode === 'mouse';
+    // Mouse mode: the wheel zooms (Shift+wheel pans sideways). Trackpad mode: scrolling pans, pinch zooms.
+    if (e.ctrlKey || e.metaKey || (mouseMode && !e.shiftKey)) {
+      const delta = e.deltaY * lineScale;
+      // Pinch gestures send many small deltas, a mouse wheel fewer large ones: keep both feeling similar.
+      const rate = Math.abs(delta) < 40 ? 0.01 : 0.0015;
+      v.zoomAtPoint(this.screen(e), v.camera.zoom * Math.exp(-delta * rate));
       return;
     }
     let dx = e.deltaX * lineScale;

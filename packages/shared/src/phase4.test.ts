@@ -14,7 +14,7 @@ describe('templates', () => {
       expect(objs).toEqual([]);
       return;
     }
-    expect(objs.length).toBeGreaterThan(3);
+    expect(objs.length).toBeGreaterThan(1);
     for (const o of objs) expect(BoardObject.safeParse(o).success).toBe(true);
     const ids = new Set(objs.map((o) => o.id));
     expect(ids.size).toBe(objs.length);

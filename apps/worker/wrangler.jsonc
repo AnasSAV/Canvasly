@@ -13,7 +13,11 @@
   "preview_urls": false,
 
   // Public origin used by Better Auth and the same-origin guard. .dev.vars overrides it locally.
-  "vars": { "BETTER_AUTH_URL": "https://canvasly.anas-hussaindeen.com" },
+  // EMAIL_FROM must be on a domain verified in Resend (RESEND_API_KEY is a secret).
+  "vars": {
+    "BETTER_AUTH_URL": "https://canvasly.anas-hussaindeen.com",
+    "EMAIL_FROM": "Canvasly <noreply@canvasly.anas-hussaindeen.com>",
+  },
 
   // The SPA is served as static assets (free, not counted as Worker requests). Only /api/* runs the Worker.
   "assets": {
