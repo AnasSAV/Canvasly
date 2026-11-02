@@ -20,6 +20,74 @@ test.beforeEach(async ({ page }) => {
   await openBoard(page, await createBoard(page.request));
 });
 
+test('new text hugs its content, and a side handle fixes the width', async ({ page }) => {
+  const canvas = page.getByTestId('board-canvas');
+  await page.keyboard.press('t');
+  await canvas.click({ position: { x: 500, y: 400 } });
+  // Right after the click there is no long default box waiting for text.
+  await expect.poll(async () => (await first(page, 'text')).w as unknown as number).toBeLessThan(20);
+
+  await page.keyboard.type('sd');
+  await expect.poll(async () => (await first(page, 'text')).text as unknown as string).toBe('sd');
+  const short = (await first(page, 'text')) as unknown as { w: number; h: number; autoWidth: boolean };
+  expect(short.autoWidth).toBe(true);
+  expect(short.w).toBeLessThan(40);
+
+  await page.keyboard.type(' and a much longer line of text');
+  await expect
+    .poll(async () => (await first(page, 'text')).w as unknown as number)
+    .toBeGreaterThan(short.w * 5);
+  const long = (await first(page, 'text')) as unknown as typeof short;
+  expect(long.h).toBeCloseTo(short.h, 0); // grew sideways, no wrapping
+
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('x');
+  await expect
+    .poll(async () => (await first(page, 'text')).h as unknown as number)
+    .toBeCloseTo(short.h * 2, 0);
+  await page.keyboard.press('Escape');
+
+  // Dragging the right handle in fixes the width, and the text wraps.
+  const o = (await first(page, 'text')) as unknown as { x: number; y: number; w: number; h: number };
+  const cam = await camera(page);
+  const right = o.x + o.w + cam.x + 2;
+  const midY = o.y + o.h / 2 + cam.y;
+  await page.mouse.move(right, midY);
+  await page.mouse.down();
+  await page.mouse.move(right - o.w / 2, midY, { steps: 6 });
+  await page.mouse.up();
+  const fixed = (await first(page, 'text')) as unknown as typeof short;
+  expect(fixed.autoWidth).toBe(false);
+  expect(fixed.w).toBeLessThan(o.w * 0.7);
+  expect(fixed.h).toBeGreaterThan(o.h);
+});
+
+test('fonts: pick one for text, stickies and shapes; the text box refits', async ({ page }) => {
+  const canvas = page.getByTestId('board-canvas');
+  await page.keyboard.press('t');
+  await canvas.click({ position: { x: 500, y: 300 } });
+  await page.keyboard.type('Handwritten');
+  await page.keyboard.press('Escape');
+  const before = (await first(page, 'text')) as unknown as { w: number; font: string };
+  expect(before.font).toBe('sans');
+
+  await page.getByTestId('font-picker').click();
+  await page.getByTestId('font-caveat').click();
+  await expect.poll(async () => (await first(page, 'text')).font as unknown as string).toBe('caveat');
+  expect(await page.evaluate(() => document.fonts.check('16px "Caveat"'))).toBe(true);
+  // Caveat is much narrower than the default font.
+  const after = (await first(page, 'text')) as unknown as { w: number };
+  expect(after.w).toBeLessThan(before.w * 0.9);
+
+  await page.keyboard.press('r');
+  await canvas.click({ position: { x: 800, y: 500 } });
+  await page.keyboard.press('Escape');
+  await page.mouse.click(800, 500);
+  await page.getByTestId('font-picker').click();
+  await page.getByTestId('font-mono').click();
+  await expect.poll(async () => (await first(page, 'rect')).font as unknown as string).toBe('mono');
+});
+
 test('the wheel zooms by default; trackpad mode scrolls instead', async ({ page }) => {
   await page.mouse.move(700, 450);
   const before = await camera(page);

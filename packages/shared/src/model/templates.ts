@@ -131,7 +131,9 @@ class Builder {
   }
 
   text(text: string, x: number, y: number, fontSize: number) {
-    return this.add({ ...makeText({ x, y }, '', '#1a1a1a', fontSize), text, w: 800, h: fontSize * 1.25 });
+    // Seeded on the server, which can't measure text: an estimate until the text is first edited.
+    const w = Math.ceil(text.length * fontSize * 0.56);
+    return this.add({ ...makeText({ x, y }, '', '#1a1a1a', fontSize), text, w, h: fontSize * 1.25 });
   }
 
   connect(from: { id: string }, to: { id: string }, arrow = true) {

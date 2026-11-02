@@ -23,10 +23,27 @@ const Box = Base.extend({
   rotation: z.number().default(0),
 });
 
+export const FONT_IDS = [
+  'sans',
+  'inter',
+  'poppins',
+  'merriweather',
+  'playfair',
+  'mono',
+  'caveat',
+  'marker',
+  'bebas',
+] as const;
+export type FontId = (typeof FONT_IDS)[number];
+
+/** Objects from before fonts existed, or using a font this client doesn't know, fall back to the default. */
+const Font = z.enum(FONT_IDS).default('sans').catch('sans');
+
 export const StickyObject = Box.extend({
   type: z.literal('sticky'),
   color: Color,
   text: z.string().default(''),
+  font: Font,
 });
 
 export const TextObject = Box.extend({
@@ -35,6 +52,9 @@ export const TextObject = Box.extend({
   fontSize: z.number().positive(),
   color: Color,
   align: z.enum(['left', 'center', 'right']).default('left'),
+  font: Font,
+  /** The box hugs the text and never wraps; dragging a side handle fixes the width. Older text is fixed. */
+  autoWidth: z.boolean().default(false),
 });
 
 export const SHAPE_KINDS = [
@@ -65,6 +85,7 @@ const ShapeFields = {
   strokeWidth: z.number().min(0),
   text: z.string().default(''),
   textColor: Color,
+  font: Font,
 };
 
 export const ShapeObject = Box.extend({ type: z.enum(SHAPE_KINDS), ...ShapeFields });

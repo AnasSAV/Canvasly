@@ -5,6 +5,7 @@ import {
   toRad,
   wrapText,
   type BoardObject,
+  type FontId,
   type Rect,
 } from '@canvasly/shared';
 import { assetUrl, getLoadedImage, loadImage } from '../doc/assets';
@@ -12,7 +13,16 @@ import type { DocStore } from '../doc/store';
 import { freehandPath } from './freehand';
 import { traceShape } from './shapePaths';
 import { drawChart, drawTable } from './widgets';
-import { FONT_FAMILY, LINE_HEIGHT, SHAPE_PADDING, STICKY_PADDING, autoFontSize, measureText } from './text';
+import {
+  FONTS,
+  FONT_FAMILY,
+  LINE_HEIGHT,
+  SHAPE_PADDING,
+  STICKY_PADDING,
+  autoFontSize,
+  ensureFonts,
+  measureWith,
+} from './text';
 
 /**
  * Plain canvas-2D renderer for the whole board, used for dashboard thumbnails and PNG/PDF export.
@@ -29,11 +39,13 @@ function drawText(
   size: number,
   align: 'left' | 'center' | 'right',
   vCenter: boolean,
+  font: FontId,
+  wrap = true,
 ) {
   if (!text) return;
-  ctx.font = `${size}px ${FONT_FAMILY}`;
+  ctx.font = `${size}px ${FONTS[font].family}`;
   ctx.textBaseline = 'top';
-  const lines = wrapText(text, box.w, size, measureText);
+  const lines = wrap ? wrapText(text, box.w, size, measureWith(font)) : text.split('\n');
   const lineH = size * LINE_HEIGHT;
   const top = vCenter ? box.y + (box.h - lines.length * lineH) / 2 : box.y;
   ctx.textAlign = align;
@@ -109,15 +121,16 @@ function drawObject(ctx: CanvasRenderingContext2D, o: BoardObject, store: DocSto
         ctx,
         o.text,
         { x: p, y: p, w: o.w - p * 2, h: o.h - p * 2 },
-        autoFontSize(o.text, o.w, o.h, p),
+        autoFontSize(o.text, o.w, o.h, p, o.font),
         'center',
         true,
+        o.font,
       );
       break;
     }
     case 'text':
       ctx.fillStyle = o.color;
-      drawText(ctx, o.text, { x: 0, y: 0, w: o.w, h: o.h }, o.fontSize, o.align, false);
+      drawText(ctx, o.text, { x: 0, y: 0, w: o.w, h: o.h }, o.fontSize, o.align, false, o.font, !o.autoWidth);
       break;
     case 'pen':
       ctx.fillStyle = o.stroke;
@@ -155,7 +168,8 @@ function drawObject(ctx: CanvasRenderingContext2D, o: BoardObject, store: DocSto
       }
       ctx.fillStyle = o.textColor;
       const box = shapeTextBox(o.type, o.w, o.h, SHAPE_PADDING);
-      drawText(ctx, o.text, box, Math.min(autoFontSize(o.text, box.w, box.h, 0), 28), 'center', true);
+      const size = Math.min(autoFontSize(o.text, box.w, box.h, 0, o.font), 28);
+      drawText(ctx, o.text, box, size, 'center', true, o.font);
     }
   }
   ctx.restore();
@@ -191,7 +205,7 @@ export async function renderRegion(
   let scale = Math.min(opts.scale ?? 2, MAX_SIDE / region.w, MAX_SIDE / region.h);
   scale = Math.min(scale, Math.sqrt(MAX_PIXELS / (region.w * region.h)));
   const objects = objectsIn(store, region, opts.only);
-  await preloadImages(objects, assetBase);
+  await Promise.all([preloadImages(objects, assetBase), ensureFonts(objects)]);
 
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, Math.round(region.w * scale));
@@ -216,6 +230,7 @@ export async function renderThumbnail(
   assetBase: string,
   bounds: Rect | null,
 ): Promise<Blob | null> {
+  await ensureFonts(store.all());
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = H;

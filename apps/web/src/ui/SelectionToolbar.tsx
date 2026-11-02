@@ -1,15 +1,20 @@
 import {
+  FONT_IDS,
   STICKY_COLORS,
   STROKE_COLORS,
+  hasText,
   isShapeObject,
   worldToScreen,
   type BoardObject,
   type ConnectorObject,
+  type FontId,
+  type TextObject,
 } from '@canvasly/shared';
 import {
   ArrowDownToLine,
   ArrowUpToLine,
   ChartColumn,
+  ChevronDown,
   Columns2,
   Copy,
   CornerDownRight,
@@ -26,6 +31,7 @@ import {
 import { useState, type ReactNode } from 'react';
 import type { Actions } from '../doc/actions';
 import { ROTATE_ANCHOR_OFFSET } from '../canvas/Overlay';
+import { FONTS, ensureFont, textBox } from '../canvas/text';
 import { useBoard, useDocVersion } from '../doc/context';
 import {
   addTableColumn,
@@ -91,7 +97,54 @@ function ColorPicker({
   );
 }
 
+function FontPicker({ value, onPick }: { value: FontId; onPick: (font: FontId) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        title="Font"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="flex h-9 items-center gap-1 rounded-lg px-2 text-sm whitespace-nowrap hover:bg-gray-100 dark:hover:bg-zinc-800"
+        data-testid="font-picker"
+      >
+        <span className="max-w-28 truncate" style={{ fontFamily: FONTS[value].family }}>
+          {FONTS[value].label}
+        </span>
+        <ChevronDown size={14} className="shrink-0" />
+      </button>
+      {open && (
+        <div className={`${panel} absolute top-11 left-0 w-52 p-1`} role="listbox" aria-label="Font">
+          {FONT_IDS.map((id) => (
+            <button
+              key={id}
+              type="button"
+              role="option"
+              aria-selected={id === value}
+              onClick={() => {
+                onPick(id);
+                setOpen(false);
+              }}
+              className={`block w-full rounded-md px-2.5 py-1.5 text-left text-[15px] whitespace-nowrap hover:bg-gray-100 dark:hover:bg-zinc-800 ${
+                id === value ? 'text-indigo-600 dark:text-indigo-400' : ''
+              }`}
+              style={{ fontFamily: FONTS[id].family }}
+              data-testid={`font-${id}`}
+            >
+              {FONTS[id].label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const Divider = () => <div className="mx-0.5 h-6 w-px bg-gray-200 dark:bg-zinc-700" />;
+
+/** A new font size, along with the box it needs. */
+const resizedText = (o: TextObject, fontSize: number) => ({ fontSize, ...textBox({ ...o, fontSize }) });
 
 /** Style controls that apply to every selected object of the relevant type. */
 function StyleControls({ objs, ids }: { objs: BoardObject[]; ids: string[] }) {
@@ -101,6 +154,24 @@ function StyleControls({ objs, ids }: { objs: BoardObject[]; ids: string[] }) {
   const first = objs[0];
   const controls: ReactNode[] = [];
 
+  const lettered = objs.filter(hasText);
+  if (lettered.length && lettered.length === objs.length) {
+    controls.push(
+      <FontPicker
+        key="font"
+        value={lettered[0]!.font}
+        onPick={(font) => {
+          // Text boxes resize to the new font, which has to be loaded before it can be measured.
+          void ensureFont(font).then(() =>
+            updateEach(board, ids, (o) => {
+              if (o.type === 'text') return { font, ...textBox({ ...o, font }) };
+              return hasText(o) ? { font } : null;
+            }),
+          );
+        }}
+      />,
+    );
+  }
   if (only('sticky') && first?.type === 'sticky') {
     controls.push(
       <ColorPicker
@@ -148,21 +219,21 @@ function StyleControls({ objs, ids }: { objs: BoardObject[]; ids: string[] }) {
         label="Smaller text"
         onClick={() =>
           updateEach(board, ids, (o) =>
-            o.type === 'text' ? { fontSize: Math.max(8, o.fontSize - 4) } : null,
+            o.type === 'text' ? resizedText(o, Math.max(8, Math.round(o.fontSize) - 4)) : null,
           )
         }
       >
         <Minus size={16} />
       </IconButton>,
       <span key="size" className="w-7 text-center text-sm tabular-nums text-gray-600">
-        {first.fontSize}
+        {Math.round(first.fontSize)}
       </span>,
       <IconButton
         key="bigger"
         label="Bigger text"
         onClick={() =>
           updateEach(board, ids, (o) =>
-            o.type === 'text' ? { fontSize: Math.min(200, o.fontSize + 4) } : null,
+            o.type === 'text' ? resizedText(o, Math.min(400, Math.round(o.fontSize) + 4)) : null,
           )
         }
       >

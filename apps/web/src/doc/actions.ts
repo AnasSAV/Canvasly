@@ -14,6 +14,7 @@ import {
   type TemplateId,
   type Vec,
 } from '@canvasly/shared';
+import { textBox } from '../canvas/text';
 import { useUI } from '../state/ui';
 import { useViewport } from '../state/viewport';
 import { compressImage, uploadAsset } from './assets';
@@ -127,7 +128,8 @@ export function createActions(board: Board, getPointerWorld: () => Vec | null) {
     insertSticker: (emoji: string) => {
       const at = viewCenter();
       const t = makeText({ x: at.x - 40, y: at.y - 40 }, nextZ(board.store), '#1a1a1a', 64);
-      actions.insertObjects([{ ...t, text: emoji, w: 90, h: 80 }]);
+      const sticker = { ...t, text: emoji };
+      actions.insertObjects([{ ...sticker, ...textBox(sticker) }]);
     },
 
     /** Serialize the selection; returns the text to put on the clipboard. */

@@ -109,6 +109,9 @@ touch support.
   cells merge; adding or removing rows and columns is last-write-wins under concurrent edits. Charts
   (bar, line, area, pie, donut) are edited in a side panel. Both draw through
   [`widgets.ts`](apps/web/src/canvas/widgets.ts), shared by the canvas and exports.
+- **Text and fonts:** new text hugs its content and grows as you type; dragging a side handle fixes the
+  width so it wraps. Text, stickies and shapes can use any of nine fonts, self-hosted through `@fontsource`
+  (Latin only; other scripts fall back to system fonts).
 - **Navigation:** the mouse wheel zooms by default; **Preferences → Mouse or trackpad** switches to trackpad
   mode, where scrolling pans and pinch zooms. Right-drag pans, and a right-click without moving opens the
   board or object menu. View preferences are per browser (`localStorage`); the start view is stored on the

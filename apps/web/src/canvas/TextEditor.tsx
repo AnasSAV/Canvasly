@@ -15,7 +15,16 @@ import { useTheme } from '../state/theme';
 import { useUI } from '../state/ui';
 import { useViewport } from '../state/viewport';
 import { ink } from './colors';
-import { FONT_FAMILY, LINE_HEIGHT, SHAPE_PADDING, STICKY_PADDING, autoFontSize } from './text';
+import {
+  FONTS,
+  FONT_FAMILY,
+  LINE_HEIGHT,
+  SHAPE_PADDING,
+  STICKY_PADDING,
+  autoFontSize,
+  textBox,
+  useFontEpoch,
+} from './text';
 import { cellPadding, cellRect } from './widgets';
 
 /** Text layout for an object, in world units: where the text goes inside the box, and how it looks. */
@@ -29,7 +38,7 @@ function layout(o: TextBearingObject, dark: boolean) {
           w: o.w - STICKY_PADDING * 2,
           h: o.h - STICKY_PADDING * 2,
         },
-        fontSize: autoFontSize(o.text, o.w, o.h, STICKY_PADDING),
+        fontSize: autoFontSize(o.text, o.w, o.h, STICKY_PADDING, o.font),
         align: 'center',
         color: '#1a1a1a',
         center: true,
@@ -46,7 +55,7 @@ function layout(o: TextBearingObject, dark: boolean) {
       const box = shapeTextBox(o.type, o.w, o.h, SHAPE_PADDING);
       return {
         box,
-        fontSize: Math.min(autoFontSize(o.text, box.w, box.h, 0), 28),
+        fontSize: Math.min(autoFontSize(o.text, box.w, box.h, 0, o.font), 28),
         align: 'center',
         color:
           o.fill === 'transparent' || o.fill.toLowerCase() === '#ffffff'
@@ -68,6 +77,7 @@ export function TextEditor() {
   const editingId = useUI((s) => s.editingId);
   const camera = useViewport((s) => s.camera);
   const dark = useTheme((s) => s.dark);
+  useFontEpoch((s) => s.epoch); // refit once this object's font has loaded
   const ref = useRef<HTMLTextAreaElement>(null);
   const obj = editingId ? board.store.get(editingId) : undefined;
   const o = obj && hasText(obj) ? obj : null;
@@ -87,7 +97,10 @@ export function TextEditor() {
     el.style.height = `${el.scrollHeight}px`;
     if (o.type === 'text') {
       const h = Math.max(o.fontSize * LINE_HEIGHT, el.scrollHeight / camera.zoom);
-      if (Math.abs(h - o.h) > 0.5) board.transact(() => patchObject(board.objects, o.id, { h }));
+      const next = o.autoWidth ? textBox(o) : { w: o.w, h };
+      if (Math.abs(next.w - o.w) > 0.5 || Math.abs(next.h - o.h) > 0.5) {
+        board.transact(() => patchObject(board.objects, o.id, next));
+      }
     }
   });
 
@@ -95,6 +108,7 @@ export function TextEditor() {
   const { box, fontSize, align, color, center } = layout(o, dark);
   const pos = worldToScreen(camera, { x: o.x, y: o.y });
   const z = camera.zoom;
+  const hugging = o.type === 'text' && o.autoWidth;
 
   const finish = () => {
     const ui = useUI.getState();
@@ -111,7 +125,8 @@ export function TextEditor() {
       style={{
         left: pos.x,
         top: pos.y,
-        width: o.w * z,
+        // Room past the end of the text, so the caret isn't clipped before the box catches up.
+        width: (o.w + (hugging ? fontSize : 0)) * z,
         height: o.type === 'text' ? undefined : o.h * z,
         paddingLeft: box.x * z,
         paddingTop: box.y * z,
@@ -137,10 +152,11 @@ export function TextEditor() {
         }}
         className="pointer-events-auto block w-full resize-none overflow-hidden border-0 bg-transparent p-0 outline-none"
         style={{
-          fontFamily: FONT_FAMILY,
+          fontFamily: FONTS[o.font].family,
           fontSize: fontSize * z,
           lineHeight: LINE_HEIGHT,
           color,
+          whiteSpace: hugging ? 'pre' : undefined,
           textAlign: align as 'left' | 'center' | 'right',
           maxHeight: o.type === 'text' ? undefined : box.h * z,
           caretColor: '#4262ff',

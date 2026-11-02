@@ -17,7 +17,7 @@ import { useUI } from '../state/ui';
 import { useViewport } from '../state/viewport';
 import { freehandPath } from './freehand';
 import { traceShape } from './shapePaths';
-import { textHeight } from './text';
+import { textBox } from './text';
 import { ConnectorNode } from './shapes';
 
 const ACCENT = '#4262ff';
@@ -122,9 +122,13 @@ function SelectionTransformer({ stage }: { stage: Konva.Stage | null }) {
         }
         if (o.type === 'text') {
           const sideDrag = anchorRef.current === 'middle-left' || anchorRef.current === 'middle-right';
-          const fontSize = sideDrag ? o.fontSize : Math.min(400, Math.max(4, round(o.fontSize * sy)));
+          const fontSize = sideDrag ? o.fontSize : Math.min(400, Math.max(4, Math.round(o.fontSize * sy)));
+          const autoWidth = o.autoWidth && !sideDrag;
+          const box = textBox({ text: o.text, w: p.w!, fontSize, font: o.font, autoWidth });
           p.fontSize = fontSize;
-          p.h = round(textHeight(o.text, p.w!, fontSize));
+          p.autoWidth = autoWidth;
+          p.w = round(box.w);
+          p.h = round(box.h);
         }
         patchObject(board.objects, o.id, p);
       }

@@ -35,6 +35,7 @@ export function makeSticky(at: Vec, z: string, color: string = STICKY_COLORS[0])
     rotation: 0,
     color,
     text: '',
+    font: 'sans',
   };
 }
 
@@ -47,13 +48,15 @@ export function makeText(at: Vec, z: string, color = '#1a1a1a', fontSize = 24): 
     groupId: null,
     x: at.x,
     y: at.y,
-    w: 240,
+    w: Math.ceil(fontSize / 2),
     h: Math.round(fontSize * 1.25),
     rotation: 0,
     text: '',
     fontSize,
     color,
     align: 'left',
+    font: 'sans',
+    autoWidth: true,
   };
 }
 
@@ -76,6 +79,7 @@ export function makeShape(
     strokeWidth: 2,
     text: '',
     textColor: '#1a1a1a',
+    font: 'sans',
   };
 }
 

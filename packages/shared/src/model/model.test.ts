@@ -20,7 +20,7 @@ import {
   readObjects,
   removeCells,
 } from './doc';
-import { cellKey, makeChart, makeConnector, makeShape, makeSticky, makeTable } from './factories';
+import { cellKey, makeChart, makeConnector, makeShape, makeSticky, makeTable, makeText } from './factories';
 import { bringToFrontKeys, compareZ, keysAbove, sendToBackKeys } from './zorder';
 
 function syncDocs(a: Y.Doc, b: Y.Doc) {
@@ -135,6 +135,29 @@ describe('tables', () => {
       expect(isShapeObject(s)).toBe(true);
       expect(hasText(s)).toBe(true);
     }
+  });
+});
+
+describe('fonts and text sizing', () => {
+  it('reads older text as fixed-width in the default font; new text hugs its content', () => {
+    const { font: _font, autoWidth: _autoWidth, ...old } = makeText({ x: 0, y: 0 }, 'a0');
+    const parsed = BoardObject.parse(old);
+    expect(parsed).toMatchObject({ font: 'sans', autoWidth: false });
+    expect(makeText({ x: 0, y: 0 }, 'a0')).toMatchObject({ font: 'sans', autoWidth: true });
+  });
+
+  it('falls back to the default for a font this client does not know', () => {
+    const sticky = { ...makeSticky({ x: 0, y: 0 }, 'a0'), font: 'from-the-future' };
+    expect(BoardObject.parse(sticky)).toMatchObject({ font: 'sans' });
+  });
+
+  it('keeps an object font through the Yjs round trip', () => {
+    const doc = new Y.Doc();
+    const objects = getObjectsMap(doc);
+    const s = makeShape('rect', { x: 0, y: 0, w: 100, h: 50 }, 'a0');
+    insertObject(objects, s);
+    patchObject(objects, s.id, { font: 'caveat' });
+    expect(fromYObject(objects.get(s.id)!)).toMatchObject({ font: 'caveat' });
   });
 });
 

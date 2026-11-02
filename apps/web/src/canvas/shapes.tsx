@@ -22,7 +22,7 @@ import { useViewport } from '../state/viewport';
 import { canvasColors, ink, paper } from './colors';
 import { freehandPath } from './freehand';
 import { traceShape } from './shapePaths';
-import { FONT_FAMILY, LINE_HEIGHT, SHAPE_PADDING, STICKY_PADDING, autoFontSize } from './text';
+import { FONTS, FONT_FAMILY, LINE_HEIGHT, SHAPE_PADDING, STICKY_PADDING, autoFontSize } from './text';
 import { drawChart, drawTable } from './widgets';
 
 /** Konva's context wrapper around the native 2D context, for drawing code shared with exports. */
@@ -42,7 +42,7 @@ interface DetailProps {
 
 const Sticky = ({ o, editing, lowDetail }: { o: StickyObject } & DetailProps) => {
   const showText = !editing && !lowDetail && o.text;
-  const fontSize = showText ? autoFontSize(o.text, o.w, o.h, STICKY_PADDING) : 0;
+  const fontSize = showText ? autoFontSize(o.text, o.w, o.h, STICKY_PADDING, o.font) : 0;
   return (
     <Group {...boxGroupProps(o)}>
       {!lowDetail && (
@@ -65,7 +65,7 @@ const Sticky = ({ o, editing, lowDetail }: { o: StickyObject } & DetailProps) =>
           height={o.h - STICKY_PADDING * 2}
           text={o.text}
           fontSize={fontSize}
-          fontFamily={FONT_FAMILY}
+          fontFamily={FONTS[o.font].family}
           lineHeight={LINE_HEIGHT}
           fill="#1a1a1a"
           align="center"
@@ -84,14 +84,13 @@ const TextNode = ({ o, editing, dark }: { o: TextObject } & DetailProps) => (
     <Rect width={o.w} height={o.h} fill="transparent" />
     {!editing && (
       <Text
-        width={o.w}
+        {...(o.autoWidth ? { wrap: 'none' } : { width: o.w, wrap: 'word' })}
         text={o.text}
         fontSize={o.fontSize}
-        fontFamily={FONT_FAMILY}
+        fontFamily={FONTS[o.font].family}
         lineHeight={LINE_HEIGHT}
         fill={ink(o.color, dark)}
         align={o.align}
-        wrap="word"
         perfectDrawEnabled={false}
       />
     )}
@@ -101,7 +100,7 @@ const TextNode = ({ o, editing, dark }: { o: TextObject } & DetailProps) => (
 const Shape = ({ o, editing, lowDetail, dark }: { o: ShapeObject } & DetailProps) => {
   const showText = !editing && !lowDetail && o.text;
   const box = shapeTextBox(o.type, o.w, o.h, SHAPE_PADDING);
-  const fontSize = showText ? Math.min(autoFontSize(o.text, box.w, box.h, 0), 28) : 0;
+  const fontSize = showText ? Math.min(autoFontSize(o.text, box.w, box.h, 0, o.font), 28) : 0;
   // Text on a light custom fill stays dark; on the default (or transparent) fill it follows the theme.
   const textColor =
     o.fill === 'transparent' || o.fill.toLowerCase() === '#ffffff' ? ink(o.textColor, dark) : o.textColor;
@@ -129,7 +128,7 @@ const Shape = ({ o, editing, lowDetail, dark }: { o: ShapeObject } & DetailProps
           height={box.h}
           text={o.text}
           fontSize={fontSize}
-          fontFamily={FONT_FAMILY}
+          fontFamily={FONTS[o.font].family}
           lineHeight={LINE_HEIGHT}
           fill={textColor}
           align="center"

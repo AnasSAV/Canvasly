@@ -11,6 +11,7 @@ import { useViewport } from '../state/viewport';
 import { GRID_SIZE, Interactions } from './interactions';
 import { OverlayLayer } from './Overlay';
 import { ConnectorNode, ObjectNode } from './shapes';
+import { ensureFonts, useFontEpoch } from './text';
 import { CellEditor, TextEditor } from './TextEditor';
 
 const LOW_DETAIL_ZOOM = 0.25;
@@ -91,6 +92,10 @@ export function BoardCanvas({ onInteractions }: { onInteractions: (i: Interactio
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [board, version, camera, width, height, selectedIds]);
 
+  // Text drawn before its font loaded used a fallback; remounting redraws it with the right one.
+  const fontEpoch = useFontEpoch((s) => s.epoch);
+  useEffect(() => void ensureFonts(visible), [visible]);
+
   return (
     <div
       ref={containerRef}
@@ -113,7 +118,7 @@ export function BoardCanvas({ onInteractions }: { onInteractions: (i: Interactio
               if (o.type !== 'connector')
                 return (
                   <ObjectNode
-                    key={o.id}
+                    key={`${o.id}:${fontEpoch}`}
                     o={o}
                     editing={o.id === editingId}
                     lowDetail={lowDetail}
