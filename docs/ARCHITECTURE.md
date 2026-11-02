@@ -1,0 +1,248 @@
+# Architecture
+
+How Canvasly works, and why it's built the way it is. For running your own copy, see [Deployment](DEPLOYMENT.md).
+
+The one constraint behind most decisions here: **everything has to run on Cloudflare's Workers Free plan**, with no
+payment method on file. That rules out R2 for files, and makes CPU time and request counts things to design around.
+
+## System overview
+
+One Worker serves the web app and the API, and each board gets its own Durable Object, which holds the document and keeps
+everyone connected to it in sync.
+
+```mermaid
+flowchart LR
+    subgraph Browser
+        UI["React UI<br/>Zustand state"]
+        Canvas["react-konva canvas"]
+        Doc["Y.Doc"]
+        Cache[("IndexedDB<br/>offline cache")]
+        UI --- Canvas --- Doc
+        Doc --- Cache
+    end
+
+    subgraph CF["Cloudflare Workers Free"]
+        Assets["Static assets<br/>web app, fonts, pdf.js"]
+        Worker["Worker: Hono API<br/>Better Auth"]
+        D1[("D1<br/>users, boards,<br/>members, thumbnails")]
+        Room["BoardRoom Durable Object<br/>one per board"]
+        SQLite[("SQLite<br/>document, images,<br/>comments")]
+        Worker --> D1
+        Worker -- "trusted role headers" --> Room
+        Room --> SQLite
+    end
+
+    Browser -- "HTTPS: pages" --> Assets
+    Browser -- "HTTPS: /api/*" --> Worker
+    Doc <-- "WebSocket: sync and presence" --> Room
+```
+
+- **One Worker** serves the SPA (Workers Static Assets with SPA fallback) and `/api/*` (`run_worker_first`), so a single
+  `wrangler deploy` ships everything.
+- **D1** holds users and sessions (Better Auth), board metadata, memberships and thumbnails.
+- **One SQLite-backed Durable Object per board** (`BoardRoom`) holds the board's Yjs document and its images. The Worker
+  authenticates the WebSocket upgrade, looks up the caller's role in D1 and forwards it in headers the client can't
+  forge. The Durable Object stores it on the socket, where it survives hibernation, and drops document updates from
+  viewers.
+
+## Key decisions
+
+| Choice                           | Why                                                                                                                                                                                                                          |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Hand-rolled y-protocols sync     | Server-side role checks need per-message control; the client batches doc + presence updates into ≤ 1 frame / 50 ms because incoming WS messages count against the DO request quota; and we control hibernation + compaction. |
+| No server-side `Awareness`       | y-protocols' `Awareness` runs a `setInterval`, which would keep the DO from hibernating. The DO parses/relays the wire format instead.                                                                                       |
+| Lazy document load               | After hibernation, most wake-ups are presence renewals that only need relaying, so the DO loads the Y.Doc from SQLite only when a sync message or RPC needs it.                                                              |
+| Debounced persistence            | Updates are merged and written to SQLite at most every 2 s (≤ 10 s after the first change, immediately when the last client leaves). The log is compacted into a chunked snapshot after 200 rows / 1 MB.                     |
+| Better Auth + PBKDF2 (WebCrypto) | Better Auth's default scrypt is pure JS and exceeds the Free plan's 10 ms CPU limit; native PBKDF2-SHA256 (100k iterations, the Workers max) doesn't. The iteration count is stored in each hash so it can be raised later.  |
+| react-konva                      | Hit-testing primitives, Transformer handles and export for free; performance comes from R-tree viewport culling, a non-listening content layer and rAF-batched drags.                                                        |
+| Hand-rolled 3-route router       | `/`, `/b/:id` and the signed-out page don't justify a router dependency.                                                                                                                                                     |
+
+## Real-time collaboration
+
+```mermaid
+sequenceDiagram
+    participant A as Maya's browser
+    participant W as Worker
+    participant R as BoardRoom
+    participant B as Alex's browser
+
+    A->>W: WebSocket upgrade, with session cookie
+    W->>W: Check the session, and the role in D1
+    W->>R: Forward, with trusted role headers
+    R-->>A: Sync: state vectors, then what's missing
+    B->>R: Connects the same way
+    A->>A: Edit applied locally, right away
+    A->>R: Update, batched to one frame per 50 ms
+    R->>R: Drop it if the socket is a viewer's
+    R-->>B: Relay to everyone else
+    R->>R: Persist, merged, at most every 2 s
+    Note over A,B: Offline edits stay in IndexedDB and merge on reconnect.<br/>Conflicts can't happen: the document is a CRDT.
+```
+
+- **Sync:** both sides exchange Yjs state vectors on every (re)connect, then stream merged updates.
+  Conflicts are impossible by construction (CRDT); text is `Y.Text`, so concurrent typing merges.
+- **Presence** (Yjs awareness): each client publishes `{ user, cursor, selection, viewport }`, validated
+  with Zod on receipt. Cursors are drawn in screen space with name tags; other people's selections get a
+  dashed outline in their color; avatars in the header dedupe multiple tabs of the same person.
+- **Follow mode:** click an avatar to mirror that person's view (their visible world rect is fitted to your
+  screen). Panning/zooming yourself, Esc or "Stop" ends it.
+- **Undo is per user:** `Y.UndoManager` only tracks this client's transactions, so undo never reverts
+  someone else's edit. Discrete actions (create, delete, restyle, reorder, group, lock) are always their
+  own undo step; drags/resizes/strokes are one step each.
+- **Offline & reconnect:** edits are persisted to IndexedDB (`y-indexeddb`) and synced on reconnect
+  (exponential backoff with jitter, immediate retry on the browser's `online` event). A 25 s app-level
+  heartbeat — answered by the DO's `setWebSocketAutoResponse` without waking it — detects dead connections.
+  A board opened before can be reopened offline (metadata cached locally). The app shell itself isn't
+  cached for offline loads (no service worker).
+
+## Sharing and permissions
+
+| Role                     | View | Comment | Edit | Rename | Share / delete |
+| ------------------------ | :--: | :-----: | :--: | :----: | :------------: |
+| Owner                    |  ✓   |    ✓    |  ✓   |   ✓    |       ✓        |
+| Editor                   |  ✓   |    ✓    |  ✓   |   ✓    |                |
+| Viewer                   |  ✓   |    ✓    |      |        |                |
+| Public link (no account) |  ✓   |         |      |        |                |
+
+- One table ([`permissions.ts`](../packages/shared/src/permissions.ts)) drives the Worker, the Durable
+  Object and the UI. Enforcement is server-side: the DO drops document updates from viewer sockets, the
+  Worker checks the role on every HTTP request, and comments are authored by the server from the
+  authenticated socket (they can't be forged by a client).
+- Role changes and removals apply **live**: the Worker tells the DO, which pushes the new role to open
+  sockets (the UI unlocks/locks without a reload) or disconnects them.
+- **Share dialog** (owner): invite by email as editor/viewer, change roles, remove people, and set link
+  access — _Off_, _Anyone can view_ (public, no sign-in; anonymous visitors connect as read-only guests)
+  or _Signed-in users can edit_ (opening the link adds you as an editor). Links can be reset, which
+  disconnects anonymous viewers using the old one.
+- **Invites and unverified email:** until an email provider is configured, email/password accounts are
+  unverified, so anyone could register someone else's address. Inviting an _existing_ account grants
+  access immediately (the dialog shows the account's name so you can check it's the right person);
+  pending invites for unknown emails are claimed automatically only by **verified** emails (Google
+  sign-in). Use the share link for everyone else. Adding an email provider later lets password accounts
+  verify and claim invites too.
+
+## Features in detail
+
+- **Comments** (tool `C`): pinned to canvas positions, threaded replies, resolve/reopen, delete own (editors
+  can delete any). Stored in the board's DO SQLite and pushed live to everyone; a side panel lists all
+  threads. Viewers can comment; anonymous public visitors can only read.
+- **Frames** (tool `F`): named areas that carry their contents when moved, always drawn beneath other
+  objects. The frames panel jumps to a frame, renames it, and starts **presentation mode** (full screen,
+  arrows/space/PageUp-Down to navigate, Esc to exit).
+- **Templates:** 15 across agile, diagrams, strategy, planning and meetings — generated in
+  [`templates.ts`](../packages/shared/src/model/templates.ts) and seeded into the new board's DO server-side, or
+  inserted into an open board from the toolbar.
+- **Tables and charts:** tables are one object whose `cells` are a nested `Y.Map`, so edits to different
+  cells merge; adding or removing rows and columns is last-write-wins under concurrent edits. Charts
+  (bar, line, area, pie, donut) are edited in a side panel. Both draw through
+  [`widgets.ts`](../apps/web/src/canvas/widgets.ts), shared by the canvas and exports.
+- **Layers:** a tab on the right edge opens a list of everything on the board, top first, with groups as
+  folders that collapse. Rows select, double-clicking zooms to an object or renames a group, and hovering
+  outlines the object. Group names live in the document's meta map, so they sync.
+- **Text and fonts:** new text hugs its content and grows as you type; dragging a side handle fixes the
+  width so it wraps. Text, stickies and shapes can use any of 28 fonts, self-hosted through `@fontsource`
+  (Latin only; other scripts fall back to system fonts), and take bold, italic, underline, strikethrough,
+  alignment, lists and a link. Text also has a size, color, highlight and background. Formatting applies to
+  the object's whole text, and lists are ordinary characters in it. Links only accept http, https and
+  mailto, and open with Ctrl/⌘ + click.
+- **Pasting from other apps:** styled HTML on the clipboard is laid out in a sandboxed iframe with scripts
+  off and read back as text, shapes and images in place
+  ([`htmlImport.ts`](../apps/web/src/doc/htmlImport.ts)). Unknown fonts map to the closest one available.
+  Images are copied onto the board, which needs their host to allow cross-origin reads. Canva's own clipboard
+  format is read directly ([`canvaClipboard.ts`](../packages/shared/src/model/canvaClipboard.ts)) for exact
+  positions, styles, rotation and shapes. It holds no image files and names fonts only by opaque id, so
+  pictures become placeholders, and only fonts mapped in
+  [`canvaImport.ts`](../apps/web/src/doc/canvaImport.ts) carry over.
+- **Connecting and corners:** dots around a selected object draw a curved arrow when dragged, meeting the other
+  shape squarely at the side nearest the pointer; clicking one adds a joined copy on that side. Rectangles and
+  every straight-sided shape have a corner radius.
+- **Lines:** straight, elbowed or curved, leaving and arriving straight out of the sides they're attached to;
+  a choice of ends, solid/dashed/dotted, thickness, and a label. The middle handle bends a line, and
+  double-clicking it straightens the line again. Bends are stored relative to the ends, so they follow them.
+- **Drawing:** pen and highlighter with three remembered presets and any custom color; smart drawing, which
+  turns a sketch into a line, rectangle, ellipse, triangle or diamond with local rules
+  ([`strokes.ts`](../packages/shared/src/geometry/strokes.ts)) and leaves anything else as ink; an eraser that
+  cuts strokes where it touches them; a stroke eraser that removes them whole; and a lasso.
+- **Navigation:** the mouse wheel zooms by default; **Preferences → Mouse or trackpad** switches to trackpad
+  mode, where scrolling pans and pinch zooms. Right-drag pans, and a right-click without moving opens the
+  board or object menu. View preferences are per browser (`localStorage`); the start view is stored on the
+  board.
+- **Export:** board or selection as PNG (2×), PDF with one page per frame (or one page for the board), and
+  a portable `.canvasly.json` (objects + embedded images) that can be imported into any board. Exports are
+  rendered from the document with a canvas-2D renderer, not screenshots, so off-screen objects are
+  included; they always use the light theme. jsPDF is loaded on demand.
+- **Dark mode:** light/dark/system toggle. Board colors are stored as authored; in dark mode only the
+  default ink (`#1a1a1a`) and paper (`#ffffff`) colors are swapped at render time.
+- **Touch & small screens:** one finger pans the empty canvas or drags objects, two fingers pinch-zoom,
+  double-tap edits text; on phones the toolbar moves to a scrollable bottom bar and the minimap/zoom
+  controls hide.
+
+## Data model
+
+```mermaid
+erDiagram
+    user ||--o{ session : has
+    user ||--o{ account : "signs in with"
+    user ||--o{ board_members : "is a"
+    boards ||--o{ board_members : has
+    boards ||--o{ board_invites : "is waiting on"
+    boards ||--o| board_thumbnails : "is shown with"
+    boards {
+        text id PK
+        text owner_id FK
+        text title
+        text link_role "viewer, editor or none"
+        text link_token
+    }
+    board_members {
+        text board_id FK
+        text user_id FK
+        text role "owner, editor or viewer"
+    }
+    board_invites {
+        text board_id FK
+        text email
+        text role
+    }
+```
+
+**Yjs document** (per board): `objects: Y.Map<id, Y.Map>` — every object has `id, type, z` (fractional
+index), `locked, groupId`; box objects add `x, y, w, h, rotation`; text lives in `Y.Text`. Connectors
+reference shapes by id (`{ kind: 'attached', objectId, anchor }`) so they follow them. Schemas are Zod
+discriminated unions in [`packages/shared/src/schemas/objects.ts`](../packages/shared/src/schemas/objects.ts).
+
+**D1** ([`apps/worker/migrations`](../apps/worker/migrations)): Better Auth's `user / session / account /
+verification`, plus `boards (… link_role, link_token)`, `board_members (board_id, user_id, role)`,
+`board_invites (board_id, email, role)` and `board_thumbnails`.
+
+**Durable Object SQLite**: `doc_snapshot (seq, data)` chunks (< 2 MB rows), `doc_updates` log,
+`assets (id, mime, bytes, data)`, `comment_threads (id, x, y, resolved)` and `comments`.
+
+## PDFs
+
+```mermaid
+flowchart LR
+    File["PDF file<br/>from a drop, paste or picker"] --> Render["pdf.js renders each page<br/>in the browser"]
+    Render --> Encode["Compressed to WebP<br/>up to 2000 px, under 1 MB"]
+    Encode --> Upload["Uploaded as an asset<br/>to the board's Durable Object"]
+    Upload --> Object["One pdf object<br/>with page turning"]
+    Object -- "extract" --> Images["Separate image objects<br/>reusing the same assets"]
+```
+
+R2 is off the table and assets are capped at 1 MB, so a PDF isn't stored as a file. Its pages are rendered in the
+browser with pdf.js, which is only downloaded when someone adds a PDF, compressed to WebP at up to 2000 px, and
+uploaded as ordinary assets (first 100 pages, up to a 100 MB file). A `pdf` object then holds the page list,
+and shows one at a time with page turning in the selection toolbar. Pages are pictures, so their text can't be
+selected or searched, and the original file can't be recovered: "Download as PDF" rebuilds one from the images.
+Pages can be extracted into images of their own: the one on show, a custom range like `1-3, 5, 8-`, or the entire
+document, which replaces the PDF. They reuse the stored page images, so extracting takes no extra storage.
+
+## Images and the size trade-off
+
+R2 needs a payment method on file, so images are stored as BLOBs in the board's Durable Object. To keep
+that viable the browser resizes every image to **max 1600 px** and re-encodes it as **WebP (≤ 1 MB,
+usually 100–300 KB)** before upload; the server rejects anything larger or not webp/png/jpeg/gif (no
+SVG, so no script injection), and serves assets with `nosniff` and long-lived private caching.
+The cost: images aren't on a CDN and count toward the 5 GB account-wide DO storage (≈ 1 GB per object
+on the Free plan) — fine for a few hundred images per board, not for a media library. Deleting an image
+object doesn't yet garbage-collect its blob.
