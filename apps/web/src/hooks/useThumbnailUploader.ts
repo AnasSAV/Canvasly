@@ -8,16 +8,27 @@ const INTERVAL_MS = 30_000;
 
 /**
  * Re-renders and uploads the board thumbnail when this client has changed the board: periodically while
- * editing, and when leaving the board (tab hidden, navigation, unmount).
+ * editing, and when leaving the board (tab hidden, navigation, unmount). A board with content but no thumbnail yet,
+ * like one just made from a template, gets its first one as soon as an editor has opened it.
  * Returns `flush()` so in-app navigation can wait for the latest preview before showing the dashboard.
  */
-export function useThumbnailUploader(board: Board, enabled: boolean): () => Promise<void> {
+export function useThumbnailUploader(
+  board: Board,
+  enabled: boolean,
+  hasThumbnail: boolean,
+): () => Promise<void> {
   const dirty = useRef(false);
+  const needsFirst = useRef(!hasThumbnail);
   const inflight = useRef<Promise<void> | null>(null);
 
   const flush = useCallback(async () => {
-    if (!enabled || !dirty.current) return inflight.current ?? undefined;
+    // The board's content can arrive before this hook is listening, so the first thumbnail goes by what's there.
+    const hasContent = contentBounds(board.store) !== null;
+    if (!enabled || !(dirty.current || (needsFirst.current && hasContent))) {
+      return inflight.current ?? undefined;
+    }
     dirty.current = false;
+    needsFirst.current = false;
     const run = (async () => {
       const blob = await renderThumbnail(board.store, board.assetBase, contentBounds(board.store));
       if (!blob) return;

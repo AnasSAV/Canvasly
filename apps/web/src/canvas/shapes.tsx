@@ -35,6 +35,7 @@ import {
   autoFontSize,
   fontStyle,
   measureText,
+  shapeFontSize,
   textDecoration,
   textLineRects,
 } from './text';
@@ -146,7 +147,7 @@ const TextNode = ({ o, editing, dark }: { o: TextObject } & DetailProps) => (
 const Shape = ({ o, editing, lowDetail, dark }: { o: ShapeObject } & DetailProps) => {
   const showText = !editing && !lowDetail && o.text;
   const box = shapeTextBox(o.type, o.w, o.h, SHAPE_PADDING);
-  const fontSize = showText ? Math.min(autoFontSize(o.text, box.w, box.h, 0, o), 28) : 0;
+  const fontSize = showText ? shapeFontSize(o.text, box, o, o) : 0;
   // Text on a light custom fill stays dark; on the default (or transparent) fill it follows the theme.
   const textColor =
     o.fill === 'transparent' || o.fill.toLowerCase() === '#ffffff' ? ink(o.textColor, dark) : o.textColor;

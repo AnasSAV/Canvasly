@@ -259,6 +259,21 @@ describe('text fit', () => {
   });
 });
 
+describe('fitting text without breaking words', () => {
+  it('chooses a size that keeps every word whole', () => {
+    // 10 wide per character at 10px, so 100 fits "Onboarding" only at 10px or below.
+    const measureLong: MeasureText = (t, size) => t.length * size;
+    const size = fitFontSize('Onboarding emails', 100, 200, measureLong, { min: 4, max: 48 });
+    expect(size).toBe(10);
+    expect(wrapText('Onboarding emails', 100, size, measureLong)).toEqual(['Onboarding', 'emails']);
+  });
+
+  it('only breaks a word too long to fit at the smallest size', () => {
+    const measureLong: MeasureText = (t, size) => t.length * size;
+    expect(fitFontSize('x'.repeat(100), 100, 200, measureLong, { min: 4, max: 48 })).toBe(4);
+  });
+});
+
 describe('line routes', () => {
   const a = { x: 0, y: 0 };
   const b = { x: 200, y: 100 };
@@ -276,6 +291,16 @@ describe('line routes', () => {
   it('elbows need only one corner when the ends face across each other', () => {
     expect(elbowPoints(a, b, right, up)).toEqual([0, 0, 200, 0, 200, 100]);
     expect(elbowPoints(a, b, down, left)).toEqual([0, 0, 0, 100, 200, 100]);
+  });
+
+  it('elbows leaving and arriving on the same side go around, not through', () => {
+    // Both out of the bottom of their shapes: below both, not halfway between.
+    expect(elbowPoints(a, b, down, down)).toEqual([0, 0, 0, 140, 200, 140, 200, 100]);
+    expect(elbowPoints(a, b, up, up)).toEqual([0, 0, 0, -40, 200, -40, 200, 100]);
+    expect(elbowPoints(a, b, right, right)).toEqual([0, 0, 240, 0, 240, 100, 200, 100]);
+    expect(elbowPoints(a, b, left, left)).toEqual([0, 0, -40, 0, -40, 100, 200, 100]);
+    // Bending takes it to wherever it's dragged, measured from halfway as usual.
+    expect(elbowPoints(a, b, down, down, { x: 0, y: 200 })).toEqual([0, 0, 0, 250, 200, 250, 200, 100]);
   });
 
   it('curves leave and arrive along the directions given', () => {

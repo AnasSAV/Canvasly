@@ -193,9 +193,10 @@ export function autoFontSize(
   h: number,
   padding: number,
   face: TextFace = PLAIN,
+  largest: number = Math.max(8, Math.round(Math.min(w, h) * 0.18)),
 ): number {
-  const max = Math.max(8, Math.round(Math.min(w, h) * 0.18));
-  const key = `${face.font}|${fontStyle(face)}|${w}|${h}|${padding}|${text}`;
+  const max = largest;
+  const key = `${face.font}|${fontStyle(face)}|${w}|${h}|${padding}|${max}|${text}`;
   let size = fitCache.get(key);
   if (size === undefined) {
     size = fitFontSize(text, Math.max(1, w - padding * 2), Math.max(1, h - padding * 2), measureWith(face), {
@@ -207,6 +208,22 @@ export function autoFontSize(
     fitCache.set(key, size);
   }
   return size;
+}
+
+const MAX_SHAPE_TEXT = 28;
+
+/**
+ * Size for text in a shape. Its upper limit comes from the whole shape, not the area text is allowed in, which is small
+ * in a diamond or a star and would otherwise make its text tiny however short it is.
+ */
+export function shapeFontSize(
+  text: string,
+  box: { w: number; h: number },
+  shape: { w: number; h: number },
+  face: TextFace,
+): number {
+  const largest = Math.max(8, Math.min(MAX_SHAPE_TEXT, Math.round(Math.min(shape.w, shape.h) * 0.2)));
+  return autoFontSize(text, box.w, box.h, 0, face, largest);
 }
 
 type TextShape = Pick<TextObject, 'text' | 'w' | 'fontSize' | 'autoWidth'> & TextFace;

@@ -258,7 +258,11 @@ function BoardView({
     if (role !== meta.role && mode.kind === 'member') onMetaChange({ ...meta, role });
   }, [canEdit, role, meta, mode.kind, onMetaChange]);
 
-  const flushThumbnail = useThumbnailUploader(board, mode.kind === 'member' && canEdit);
+  const flushThumbnail = useThumbnailUploader(
+    board,
+    mode.kind === 'member' && canEdit,
+    meta.thumbnailVersion !== null,
+  );
   usePresencePublisher(board);
   useFollow(board);
 

@@ -24,6 +24,7 @@ import {
   STICKY_PADDING,
   autoFontSize,
   fontStyle,
+  shapeFontSize,
   textBox,
   textDecoration,
   useFontEpoch,
@@ -59,7 +60,7 @@ function layout(o: TextBearingObject, dark: boolean) {
       const box = shapeTextBox(o.type, o.w, o.h, SHAPE_PADDING);
       return {
         box,
-        fontSize: Math.min(autoFontSize(o.text, box.w, box.h, 0, o), 28),
+        fontSize: shapeFontSize(o.text, box, o, o),
         align: o.align,
         color:
           o.fill === 'transparent' || o.fill.toLowerCase() === '#ffffff'

@@ -1,13 +1,24 @@
 /**
  * Board colors are stored as authored (light-theme values) so exports and other users are unaffected by
- * anyone's theme. In dark mode the default "ink" and "paper" colors are swapped at render time so default
- * black text/lines and white shapes stay readable; every other color renders as-is.
+ * anyone's theme. In dark mode, near-black ink and the default white paper are swapped at render time so text,
+ * lines and plain shapes stay readable, whatever shade of black they came with; other colors render as-is.
  */
-const INK = '#1a1a1a';
 const PAPER = '#ffffff';
+const NEAR_BLACK = 60; // perceived brightness, 0 to 255
 
-export const ink = (color: string, dark: boolean) =>
-  dark && color.toLowerCase() === INK ? '#e7e7ea' : color;
+function brightness(color: string): number | null {
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color)?.[1];
+  if (!hex) return null;
+  const full = hex.length === 3 ? [...hex].map((c) => c + c).join('') : hex;
+  const channel = (i: number) => parseInt(full.slice(i, i + 2), 16);
+  return 0.299 * channel(0) + 0.587 * channel(2) + 0.114 * channel(4);
+}
+
+export const ink = (color: string, dark: boolean) => {
+  if (!dark) return color;
+  const b = brightness(color);
+  return b !== null && b < NEAR_BLACK ? '#e7e7ea' : color;
+};
 export const paper = (color: string, dark: boolean) =>
   dark && color.toLowerCase() === PAPER ? '#2a2a30' : color;
 

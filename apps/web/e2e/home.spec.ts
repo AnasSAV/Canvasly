@@ -131,6 +131,23 @@ test('filters count and narrow the list; sort and search work; the latest board 
   await expect(page).toHaveURL(/\/b\/[\w-]+$/);
 });
 
+test('a board made from a template gets its thumbnail once it has been opened', async ({ browser }) => {
+  const { page } = await signedIn(browser);
+  const res = await page.request.post('/api/boards', {
+    data: { title: 'From a template', template: 'kanban' },
+  });
+  const { id } = (await res.json()) as { id: string };
+  await page.goto('/');
+  await expect(page.getByTestId('board-card').locator('img')).toHaveCount(0);
+
+  await page.goto(`/b/${id}`);
+  await expect(page.getByTestId('connection-status')).toHaveAttribute('data-status', 'online');
+  await expect.poll(() => page.evaluate(() => window.__canvasly!.store.size)).toBeGreaterThan(0);
+  await page.getByTestId('main-menu').click();
+  await page.getByRole('menuitem', { name: 'Back to boards' }).click();
+  await expect(page.getByTestId('board-card').locator('img')).toBeVisible();
+});
+
 test('a brand new account gets a welcome, not a wall of zeros', async ({ browser }) => {
   const { page } = await signedIn(browser);
   await page.goto('/');

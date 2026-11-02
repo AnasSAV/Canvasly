@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import type * as ColorsModule from '../src/canvas/colors';
 import type * as ViewportModule from '../src/state/viewport';
 import { createBoard, openBoard, signIn, signUp } from './helpers';
 
@@ -86,6 +87,33 @@ test('fonts: pick one for text, stickies and shapes; the text box refits', async
   await page.getByTestId('font-picker').click();
   await page.getByTestId('font-mono').click();
   await expect.poll(async () => (await first(page, 'rect')).font as unknown as string).toBe('mono');
+});
+
+test('dark mode swaps near-black ink for any shade of black, and leaves other colors alone', async ({
+  page,
+}) => {
+  const results = await page.evaluate(async (url) => {
+    const { ink } = (await import(/* @vite-ignore */ url)) as typeof ColorsModule;
+    const light = '#e7e7ea';
+    return {
+      defaultBlack: ink('#1a1a1a', true) === light,
+      canvaBlack: ink('#1e1e1e', true) === light,
+      shortBlack: ink('#000', true) === light,
+      red: ink('#e03131', true),
+      blue: ink('#4262ff', true),
+      lightMode: ink('#1a1a1a', false),
+      transparent: ink('transparent', true),
+    };
+  }, '/src/canvas/colors.ts');
+  expect(results).toEqual({
+    defaultBlack: true,
+    canvaBlack: true,
+    shortBlack: true,
+    red: '#e03131',
+    blue: '#4262ff',
+    lightMode: '#1a1a1a',
+    transparent: 'transparent',
+  });
 });
 
 test('the wheel zooms by default; trackpad mode scrolls instead', async ({ page }) => {

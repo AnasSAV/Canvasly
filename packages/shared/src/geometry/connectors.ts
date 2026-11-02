@@ -146,18 +146,25 @@ function leaving(end: ConnectorEnd, at: Vec, other: Vec, get: GetAttachTarget): 
   return axisOf({ x: other.x - at.x, y: other.y - at.y });
 }
 
+const ELBOW_CLEARANCE = 40;
+
 const isHorizontal = (d: Vec) => Math.abs(d.x) >= Math.abs(d.y);
 
 /** Right-angled route between two points, leaving and arriving along the given directions when they're known. */
 export function elbowPoints(a: Vec, b: Vec, from?: Vec, to?: Vec, bend?: Vec | null): number[] {
   const startFlat = from ? isHorizontal(from) : Math.abs(b.x - a.x) >= Math.abs(b.y - a.y);
   const endFlat = to ? isHorizontal(to) : startFlat;
+  // Ends facing the same way go around the outside; halfway between them would run back through a shape.
+  const beyond = (p: number, q: number, dir: number) =>
+    dir > 0 ? Math.max(p, q) + ELBOW_CLEARANCE : Math.min(p, q) - ELBOW_CLEARANCE;
   if (startFlat && endFlat) {
-    const mx = (a.x + b.x) / 2 + (bend?.x ?? 0);
+    const around = from && to && from.x * to.x > 0;
+    const mx = bend ? (a.x + b.x) / 2 + bend.x : around ? beyond(a.x, b.x, from.x) : (a.x + b.x) / 2;
     return [a.x, a.y, mx, a.y, mx, b.y, b.x, b.y];
   }
   if (!startFlat && !endFlat) {
-    const my = (a.y + b.y) / 2 + (bend?.y ?? 0);
+    const around = from && to && from.y * to.y > 0;
+    const my = bend ? (a.y + b.y) / 2 + bend.y : around ? beyond(a.y, b.y, from.y) : (a.y + b.y) / 2;
     return [a.x, a.y, a.x, my, b.x, my, b.x, b.y];
   }
   // One bend is enough when the ends face across each other.

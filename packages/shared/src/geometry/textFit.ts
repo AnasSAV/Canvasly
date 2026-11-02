@@ -43,7 +43,10 @@ export interface FitOptions {
   lineHeight?: number;
 }
 
-/** Largest integer font size in [min, max] at which `text` wrapped to `width` fits within `height`. */
+/**
+ * Largest integer font size in [min, max] at which `text` wrapped to `width` fits within `height`, with every word
+ * whole. Only a word too long to fit even at `min` ends up broken.
+ */
 export function fitFontSize(
   text: string,
   width: number,
@@ -52,7 +55,9 @@ export function fitFontSize(
   { min = 6, max = 48, lineHeight = 1.25 }: FitOptions = {},
 ): number {
   if (!text.trim()) return max;
+  const words = text.split(/\s+/).filter(Boolean);
   const fits = (size: number) => {
+    if (words.some((word) => measure(word, size) > width)) return false;
     const lines = wrapText(text, width, size, measure);
     if (lines.length * size * lineHeight > height) return false;
     return lines.every((l) => measure(l, size) <= width);

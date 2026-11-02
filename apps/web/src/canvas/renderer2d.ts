@@ -28,6 +28,7 @@ import {
   fontStyle,
   measureText,
   measureWith,
+  shapeFontSize,
   textLineRects,
 } from './text';
 
@@ -198,7 +199,7 @@ function drawObject(ctx: CanvasRenderingContext2D, o: BoardObject, store: DocSto
       }
       ctx.fillStyle = o.textColor;
       const box = shapeTextBox(o.type, o.w, o.h, SHAPE_PADDING);
-      const size = Math.min(autoFontSize(o.text, box.w, box.h, 0, o), 28);
+      const size = shapeFontSize(o.text, box, o, o);
       drawText(ctx, o.text, box, size, o, true);
     }
   }
