@@ -13,7 +13,6 @@ import {
   type ListKind,
   type ObjectPatch,
   type TextBearingObject,
-  type TextObject,
 } from '@canvasly/shared';
 import {
   AlignCenter,
@@ -55,7 +54,7 @@ import {
 import type { Actions } from '../doc/actions';
 import { ROTATE_ANCHOR_OFFSET } from '../canvas/Overlay';
 import { SHAPE_LABELS } from '../canvas/shapePaths';
-import { FONTS, FONT_MENU, ensureFont, textBox } from '../canvas/text';
+import { FONTS, FONT_MENU, MAX_FONT_SIZE, ensureFont, stepFontSize } from '../canvas/text';
 import { useBoard, useDocVersion } from '../doc/context';
 import {
   addTableColumn,
@@ -63,6 +62,7 @@ import {
   convertObject,
   deleteTableColumn,
   deleteTableRow,
+  restyleText,
   selectionBounds,
   updateEach,
   type ConvertTarget,
@@ -99,8 +99,7 @@ const HIGHLIGHT_COLORS = [
 ];
 
 const RAIL_WIDTH = 72;
-
-const FONT_SIZES = [8, 10, 12, 14, 18, 24, 30, 36, 48, 64, 80, 96, 144, 200, 288, 400];
+const MOD = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
 
 /** Only one of the toolbar's dropdowns is open at a time. */
 const OpenMenu = createContext<{ open: string | null; setOpen: (id: string | null) => void }>({
@@ -235,8 +234,6 @@ function FontPicker({ value, onPick }: { value: FontId; onPick: (font: FontId) =
 
 function FontSizeControl({ value, onChange }: { value: number; onChange: (size: number) => void }) {
   const size = Math.round(value);
-  const up = FONT_SIZES.find((s) => s > size) ?? 400;
-  const down = [...FONT_SIZES].reverse().find((s) => s < size) ?? 4;
   const stepper = 'flex h-4 w-5 items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-zinc-800';
   return (
     <div className="flex items-center">
@@ -251,17 +248,29 @@ function FontSizeControl({ value, onChange }: { value: number; onChange: (size: 
         }}
         onBlur={(e) => {
           const n = Math.round(Number(e.currentTarget.value));
-          if (Number.isFinite(n) && n > 0 && n !== size) onChange(Math.min(400, Math.max(4, n)));
+          if (Number.isFinite(n) && n > 0 && n !== size) onChange(Math.min(MAX_FONT_SIZE, Math.max(4, n)));
           else e.currentTarget.value = String(size);
         }}
         className="h-8 w-9 rounded-md bg-transparent text-center text-sm tabular-nums outline-none hover:bg-gray-100 focus:bg-gray-100 dark:hover:bg-zinc-800 dark:focus:bg-zinc-800"
         data-testid="font-size"
       />
       <div className="flex flex-col">
-        <button type="button" aria-label="Bigger text" className={stepper} onClick={() => onChange(up)}>
+        <button
+          type="button"
+          aria-label="Bigger text"
+          title={`Bigger text (${MOD} Shift >)`}
+          className={stepper}
+          onClick={() => onChange(stepFontSize(size, 1))}
+        >
           <ChevronUp size={14} />
         </button>
-        <button type="button" aria-label="Smaller text" className={stepper} onClick={() => onChange(down)}>
+        <button
+          type="button"
+          aria-label="Smaller text"
+          title={`Smaller text (${MOD} Shift <)`}
+          className={stepper}
+          onClick={() => onChange(stepFontSize(size, -1))}
+        >
           <ChevronDown size={14} />
         </button>
       </div>
@@ -450,11 +459,6 @@ function MoreMenu({ actions, title }: { actions: Actions; title: string }) {
 
 const Divider = () => <div className="mx-0.5 h-6 w-px bg-gray-200 dark:bg-zinc-700" />;
 
-/** A text box takes the size its new style needs. */
-function fitted(o: TextBearingObject, p: ObjectPatch): ObjectPatch {
-  return o.type === 'text' ? { ...p, ...textBox({ ...o, ...p } as TextObject) } : p;
-}
-
 /** Style controls that apply to every selected object of the relevant type. */
 function StyleControls({ objs, ids }: { objs: BoardObject[]; ids: string[] }) {
   const board = useBoard();
@@ -466,8 +470,7 @@ function StyleControls({ objs, ids }: { objs: BoardObject[]; ids: string[] }) {
   const lettered = objs.filter(hasText);
   const lead = lettered[0];
   if (lead && lettered.length === objs.length) {
-    const style = (fn: (o: TextBearingObject) => ObjectPatch) =>
-      updateEach(board, ids, (o) => (hasText(o) ? fitted(o, fn(o)) : null));
+    const style = (fn: (o: TextBearingObject) => ObjectPatch) => restyleText(board, ids, fn);
     const list = listKind(lead.text);
     const setList = (kind: ListKind) => style((o) => ({ text: toggleList(o.text, kind) }));
     const AlignIcon = lead.align === 'center' ? AlignCenter : lead.align === 'right' ? AlignRight : AlignLeft;
@@ -496,7 +499,7 @@ function StyleControls({ objs, ids }: { objs: BoardObject[]; ids: string[] }) {
         testId="text-format"
       >
         <IconButton
-          label="Bold"
+          label={`Bold (${MOD} B)`}
           active={lead.bold}
           onClick={() => style(() => ({ bold: !lead.bold }))}
           data-testid="format-bold"
@@ -504,7 +507,7 @@ function StyleControls({ objs, ids }: { objs: BoardObject[]; ids: string[] }) {
           <Bold size={18} />
         </IconButton>
         <IconButton
-          label="Italic"
+          label={`Italic (${MOD} I)`}
           active={lead.italic}
           onClick={() => style(() => ({ italic: !lead.italic }))}
           data-testid="format-italic"
@@ -512,7 +515,7 @@ function StyleControls({ objs, ids }: { objs: BoardObject[]; ids: string[] }) {
           <Italic size={18} />
         </IconButton>
         <IconButton
-          label="Underline"
+          label={`Underline (${MOD} U)`}
           active={lead.underline}
           onClick={() => style(() => ({ underline: !lead.underline }))}
           data-testid="format-underline"
@@ -520,7 +523,7 @@ function StyleControls({ objs, ids }: { objs: BoardObject[]; ids: string[] }) {
           <Underline size={18} />
         </IconButton>
         <IconButton
-          label="Strikethrough"
+          label={`Strikethrough (${MOD} Shift X)`}
           active={lead.strike}
           onClick={() => style(() => ({ strike: !lead.strike }))}
           data-testid="format-strike"
@@ -563,7 +566,7 @@ function StyleControls({ objs, ids }: { objs: BoardObject[]; ids: string[] }) {
         testId="text-list"
       >
         <IconButton
-          label="Bulleted list"
+          label={`Bulleted list (${MOD} Shift 8)`}
           active={list === 'bullet'}
           onClick={() => setList('bullet')}
           data-testid="list-bullet"
@@ -571,7 +574,7 @@ function StyleControls({ objs, ids }: { objs: BoardObject[]; ids: string[] }) {
           <List size={18} />
         </IconButton>
         <IconButton
-          label="Numbered list"
+          label={`Numbered list (${MOD} Shift 7)`}
           active={list === 'number'}
           onClick={() => setList('number')}
           data-testid="list-number"

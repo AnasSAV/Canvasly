@@ -11,7 +11,7 @@ import {
 } from '@canvasly/shared';
 import { useLayoutEffect, useRef } from 'react';
 import { useBoard, useDocVersion } from '../doc/context';
-import { deleteObjects, moveTableCell, setCell } from '../doc/ops';
+import { deleteObjects, moveTableCell, setCell, textShortcut } from '../doc/ops';
 import { useTheme } from '../state/theme';
 import { useUI } from '../state/ui';
 import { useViewport } from '../state/viewport';
@@ -155,7 +155,9 @@ export function TextEditor() {
         onBlur={finish}
         onKeyDown={(e) => {
           e.stopPropagation();
-          if (e.key === 'Escape' || (e.key === 'Enter' && (e.metaKey || e.ctrlKey))) {
+          if (textShortcut(board, [o.id], e)) {
+            e.preventDefault();
+          } else if (e.key === 'Escape' || (e.key === 'Enter' && (e.metaKey || e.ctrlKey))) {
             e.preventDefault();
             finish();
           } else if (e.key === 'Enter' && !e.shiftKey) {

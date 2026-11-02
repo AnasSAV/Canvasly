@@ -22,6 +22,15 @@ const GROUPS: { title: string; items: [string, string][] }[] = [
     ],
   },
   {
+    title: 'Text',
+    items: [
+      [`${MOD} B / I / U`, 'Bold / Italic / Underline'],
+      [`${MOD} Shift X`, 'Strikethrough'],
+      [`${MOD} Shift > / <`, 'Bigger / Smaller text'],
+      [`${MOD} Shift 8 / 7`, 'Bulleted / Numbered list'],
+    ],
+  },
+  {
     title: 'Navigate',
     items: [
       ['Wheel', 'Zoom (mouse mode)'],

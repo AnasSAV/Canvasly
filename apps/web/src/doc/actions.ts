@@ -4,11 +4,9 @@ import {
   hasText,
   makeChart,
   makeImage,
-  makeSticky,
   makeTable,
   makeText,
   patchObject,
-  STICKY_SIZE,
   type BoardObject,
   type ChartKind,
   type TemplateId,
@@ -19,6 +17,8 @@ import { useUI } from '../state/ui';
 import { useViewport } from '../state/viewport';
 import { compressImage, uploadAsset } from './assets';
 import type { Board } from './board';
+import { canvaDataFromHtml, canvaToObjects } from './canvaImport';
+import { readHtml, toObjects } from './htmlImport';
 import {
   addObjects,
   bringToFront,
@@ -36,9 +36,13 @@ import {
   selectionBounds,
   sendToBack,
   setStartView,
+  textShortcut,
   toggleLock,
   ungroup,
 } from './ops';
+
+/** Pasted text longer than this wraps instead of running on as one line. */
+const MAX_PASTED_LINE = 640;
 
 /** User-level commands shared by keyboard shortcuts, toolbars and menus. */
 export function createActions(board: Board, getPointerWorld: () => Vec | null) {
@@ -47,6 +51,13 @@ export function createActions(board: Board, getPointerWorld: () => Vec | null) {
   const viewCenter = (): Vec => {
     const r = useViewport.getState().visibleRect();
     return { x: r.x + r.w / 2, y: r.y + r.h / 2 };
+  };
+  const isOwnPayload = (text: string) => {
+    try {
+      return ClipboardPayload.safeParse(JSON.parse(text)).success;
+    } catch {
+      return false;
+    }
   };
   /** In-app clipboard fallback for when the system clipboard is unavailable. */
   let memoryClipboard: ClipboardPayload | null = null;
@@ -81,6 +92,7 @@ export function createActions(board: Board, getPointerWorld: () => Vec | null) {
     bringToFront: () => editable() && bringToFront(board, sel()),
     sendToBack: () => editable() && sendToBack(board, sel()),
     nudge: (dx: number, dy: number) => editable() && nudge(board, sel(), dx, dy),
+    textShortcut: (e: KeyboardEvent) => editable() && textShortcut(board, sel(), e),
     zoomToFit: () => {
       const ids = sel();
       useViewport.getState().fit(ids.length ? selectionBounds(board.store, ids) : contentBounds(board.store));
@@ -145,7 +157,17 @@ export function createActions(board: Board, getPointerWorld: () => Vec | null) {
       if (text) actions.deleteSelected();
       return text;
     },
-    /** Paste canvasly JSON (or the in-app clipboard when empty); other plain text becomes a sticky note. */
+    /** Pasted designs can be far larger than the view, so make sure all of it can be seen. */
+    insertRich: (objects: BoardObject[], target?: Vec) => {
+      actions.insertObjects(objects, target ?? getPointerWorld() ?? viewCenter());
+      const pasted = selectionBounds(board.store, ui().selectedIds);
+      const view = useViewport.getState().visibleRect();
+      if (pasted && (pasted.w > view.w * 0.9 || pasted.h > view.h * 0.9)) {
+        useViewport.getState().fit(pasted);
+      }
+    },
+
+    /** Paste canvasly JSON (or the in-app clipboard when empty); other plain text becomes a text object. */
     pasteText: (text: string | null, target?: Vec) => {
       if (!editable()) return;
       let payload: ClipboardPayload | null = null;
@@ -164,28 +186,81 @@ export function createActions(board: Board, getPointerWorld: () => Vec | null) {
         const ids = pastePayload(board, payload, at);
         ui().select(expandGroups(board.store, ids));
       } else if (text?.trim()) {
-        const sticky = makeSticky(
-          { x: at.x - STICKY_SIZE / 2, y: at.y - STICKY_SIZE / 2 },
-          nextZ(board.store),
-        );
-        addObjects(board, [{ ...sticky, color: ui().stickyColor, text: text.trim().slice(0, 2000) }]);
-        ui().select([sticky.id]);
+        const plain = { ...makeText(at, nextZ(board.store)), text: text.trim().slice(0, 20_000) };
+        const fits = textBox(plain).w <= MAX_PASTED_LINE;
+        const t = fits ? plain : { ...plain, autoWidth: false, w: MAX_PASTED_LINE };
+        actions.insertObjects([{ ...t, ...textBox(t) }], at);
       }
+    },
+
+    /**
+     * Paste from the system clipboard. Other apps usually offer several forms of the same content, and the
+     * richest one that works wins: our own objects, then Canva's elements, then styled HTML, then image files,
+     * then plain text.
+     */
+    pasteContent: async (
+      { html, text, files, canva }: { html: string; text: string; files: File[]; canva?: string },
+      target?: Vec,
+    ) => {
+      if (!editable()) return;
+      const images = files.filter((f) => f.type.startsWith('image/'));
+      const own = isOwnPayload(text);
+      const canvaData = own ? null : canva || canvaDataFromHtml(html);
+      const fromCanva = canvaData ? await canvaToObjects(board.id, canvaData) : null;
+      if (fromCanva?.objects.length) {
+        actions.insertRich(fromCanva.objects, target);
+        const { pictures, unreadable } = fromCanva;
+        const notes = [
+          pictures === 1 && "1 picture is a gray box: Canva doesn't share image files with other apps.",
+          pictures > 1 &&
+            `${pictures} pictures are gray boxes: Canva doesn't share image files with other apps.`,
+          pictures > 0 && 'To add one, take a screenshot of it or download it, then paste it here.',
+          unreadable === 1 && "1 other element couldn't be read, and is a gray box too.",
+          unreadable > 1 && `${unreadable} other elements couldn't be read, and are gray boxes too.`,
+        ].filter(Boolean);
+        if (notes.length) alert(notes.join(' '));
+        return;
+      }
+      if (html.trim() && !own) {
+        const items = await readHtml(html);
+        const pictures = items.filter((i) => i.kind === 'image').length;
+        // A lone picture is better taken from the image file, when there is one: no host can refuse it.
+        if (items.length > 0 && (!images.length || items.length > 1 || pictures !== 1)) {
+          const { objects, failed } = await toObjects(board.id, items);
+          if (objects.length) actions.insertRich(objects, target);
+          if (failed) {
+            alert(
+              failed === 1
+                ? "1 image couldn't be copied: the site it's on doesn't allow it."
+                : `${failed} images couldn't be copied: the site they're on doesn't allow it.`,
+            );
+          }
+          if (objects.length) return;
+        }
+      }
+      if (images.length) {
+        await actions.insertImages(images, target);
+        return;
+      }
+      actions.pasteText(text || null, target);
     },
 
     /** Menu-driven paste: reads the system clipboard if the browser allows, else the in-app clipboard. */
     pasteAt: async (at: Vec) => {
       if (!editable()) return;
       try {
+        const content = { html: '', text: '', files: [] as File[] };
         for (const item of await navigator.clipboard.read()) {
-          const type = item.types.find((t) => t.startsWith('image/'));
-          if (type) {
+          for (const type of item.types) {
             const blob = await item.getType(type);
-            await actions.insertImages([new File([blob], 'pasted-image', { type })], at);
-            return;
+            if (type === 'text/html') content.html = await blob.text();
+            else if (type === 'text/plain') content.text = await blob.text();
+            else if (type.startsWith('image/')) {
+              content.files.push(new File([blob], 'pasted-image', { type }));
+            }
           }
         }
-        actions.pasteText((await navigator.clipboard.readText()) || null, at);
+        await actions.pasteContent(content, at);
       } catch {
         actions.pasteText(null, at);
       }

@@ -34,8 +34,13 @@ test('dashboard: create, open, rename and delete a board', async ({ page }) => {
   await page.getByRole('button', { name: 'Board options' }).click();
   await page.getByRole('button', { name: 'Delete' }).click();
   await expect(card).toHaveCount(0);
-  const res = await page.request.get('/api/boards');
-  expect(((await res.json()) as { boards: unknown[] }).boards).toHaveLength(0);
+  // The card goes as soon as you confirm; the server catches up a moment later.
+  await expect
+    .poll(async () => {
+      const res = await page.request.get('/api/boards');
+      return ((await res.json()) as { boards: unknown[] }).boards.length;
+    })
+    .toBe(0);
 });
 
 test('board content persists in the Durable Object across browsers', async ({ page, browser }) => {

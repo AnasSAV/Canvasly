@@ -56,6 +56,62 @@ export const FONT_MENU: FontId[] = [
   ...FONT_IDS.filter((id) => id !== 'sans').sort((a, b) => FONTS[a].label.localeCompare(FONTS[b].label)),
 ];
 
+export const MAX_FONT_SIZE = 1000;
+const FONT_SIZES = [
+  8,
+  10,
+  12,
+  14,
+  18,
+  24,
+  30,
+  36,
+  48,
+  64,
+  80,
+  96,
+  144,
+  200,
+  288,
+  400,
+  600,
+  800,
+  MAX_FONT_SIZE,
+];
+
+/** The next common size up or down from `size`. */
+export function stepFontSize(size: number, dir: 1 | -1): number {
+  const rounded = Math.round(size);
+  if (dir > 0) return FONT_SIZES.find((s) => s > rounded) ?? MAX_FONT_SIZE;
+  return [...FONT_SIZES].reverse().find((s) => s < rounded) ?? 4;
+}
+
+/**
+ * The font we have that's closest to a CSS font-family list from elsewhere: the same font if we have it,
+ * otherwise one of the same kind.
+ */
+export function matchFont(cssFamily: string): FontId {
+  const names = cssFamily
+    .split(',')
+    .map((n) =>
+      n
+        .trim()
+        .replace(/^["']|["']$/g, '')
+        .toLowerCase(),
+    )
+    .filter(Boolean);
+  for (const name of names) {
+    const same = FONT_IDS.find((id) => id !== 'sans' && FONTS[id].label.toLowerCase() === name);
+    if (same) return same;
+  }
+  const all = names.join(' ');
+  if (/mono|courier|consol|\bcode\b/.test(all)) return 'mono';
+  if (/script|hand|brush|cursive|marker|signature/.test(all)) return 'caveat';
+  if (/impact|anton|league gothic|condensed/.test(all)) return 'bebas';
+  if (/(?<!sans[- ])serif|garamond|times|baskerville|didot|bodoni|lora|cambria/.test(all)) return 'georgia';
+  return 'sans';
+}
+
 /** What decides how wide text is. Objects carry these fields, so any of them can be passed as is. */
 export type TextFace = Pick<TextObject, 'font' | 'bold' | 'italic'>;
 const PLAIN: TextFace = { font: 'sans', bold: false, italic: false };

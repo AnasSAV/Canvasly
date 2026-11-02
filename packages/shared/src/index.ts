@@ -16,6 +16,7 @@ export * from './geometry/strokes';
 export * from './geometry/textFit';
 export * from './model/doc';
 export * from './model/zorder';
+export * from './model/canvaClipboard';
 export * from './model/clipboard';
 export * from './model/factories';
 export * from './model/templates';

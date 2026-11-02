@@ -4,6 +4,7 @@ import {
   cellKey,
   cloneForPaste,
   getMetaMap,
+  hasText,
   insertObject,
   isShapeObject,
   keyAbove,
@@ -16,6 +17,7 @@ import {
   prepareCopy,
   removeCells,
   sendToBackKeys,
+  toggleList,
   unionRects,
   type BoardObject,
   type ClipboardPayload,
@@ -24,10 +26,11 @@ import {
   type Rect,
   type ShapeKind,
   type TextBearingObject,
+  type TextObject,
   type TableObject,
   type Vec,
 } from '@canvasly/shared';
-import { textBox } from '../canvas/text';
+import { stepFontSize, textBox } from '../canvas/text';
 import type { Board } from './board';
 import type { DocStore } from './store';
 
@@ -306,4 +309,55 @@ export function convertObject(board: Board, o: TextBearingObject, target: Conver
     next = { ...shape, ...style, ...kept, textColor: ink };
   }
   board.transact(() => insertObject(board.objects, next), true);
+}
+
+/** A text box takes the size its new style needs. */
+export function fittedText(o: TextBearingObject, p: ObjectPatch): ObjectPatch {
+  return o.type === 'text' ? { ...p, ...textBox({ ...o, ...p } as TextObject) } : p;
+}
+
+export function restyleText(board: Board, ids: string[], fn: (o: TextBearingObject) => ObjectPatch) {
+  updateEach(board, ids, (o) => (hasText(o) ? fittedText(o, fn(o)) : null));
+}
+
+const FORMAT_KEYS = { b: 'bold', i: 'italic', u: 'underline' } as const;
+const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
+
+/**
+ * Formatting keys, shared by the selection and the text editor, and applied to the object's whole text.
+ * True if the keys meant something here and the browser's own meaning for them should be stopped.
+ */
+export function textShortcut(board: Board, ids: string[], e: KeyboardEvent | React.KeyboardEvent): boolean {
+  if (!(isMac ? e.metaKey : e.ctrlKey) || e.altKey) return false;
+  const targets = ids.filter((id) => {
+    const o = board.store.get(id);
+    return !!o && hasText(o) && !o.locked;
+  });
+  const lead = board.store.get(targets[0] ?? '');
+  if (!lead || !hasText(lead)) return false;
+  const key = e.key.toLowerCase();
+
+  const toggle = !e.shiftKey
+    ? FORMAT_KEYS[key as keyof typeof FORMAT_KEYS]
+    : key === 'x'
+      ? 'strike'
+      : undefined;
+  if (toggle) {
+    const next = !lead[toggle];
+    restyleText(board, targets, () => ({ [toggle]: next }));
+    return true;
+  }
+  if (e.shiftKey && (key === '>' || key === '<')) {
+    const dir = key === '>' ? 1 : -1;
+    restyleText(board, targets, (o) =>
+      o.type === 'text' ? { fontSize: stepFontSize(o.fontSize, dir) } : {},
+    );
+    return true;
+  }
+  if (e.shiftKey && (e.code === 'Digit7' || e.code === 'Digit8')) {
+    const kind = e.code === 'Digit8' ? 'bullet' : 'number';
+    restyleText(board, targets, (o) => ({ text: toggleList(o.text, kind) }));
+    return true;
+  }
+  return false;
 }

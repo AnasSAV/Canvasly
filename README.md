@@ -115,6 +115,14 @@ touch support.
   alignment, lists and a link. Text also has a size, color, highlight and background. Formatting applies to
   the object's whole text, and lists are ordinary characters in it. Links only accept http, https and
   mailto, and open with Ctrl/⌘ + click.
+- **Pasting from other apps:** styled HTML on the clipboard is laid out in a sandboxed iframe with scripts
+  off and read back as text, shapes and images in place
+  ([`htmlImport.ts`](apps/web/src/doc/htmlImport.ts)). Unknown fonts map to the closest one available.
+  Images are copied onto the board, which needs their host to allow cross-origin reads. Canva's own clipboard
+  format is read directly ([`canvaClipboard.ts`](packages/shared/src/model/canvaClipboard.ts)) for exact
+  positions, styles, rotation and shapes. It holds no image files and names fonts only by opaque id, so
+  pictures become placeholders, and only fonts mapped in
+  [`canvaImport.ts`](apps/web/src/doc/canvaImport.ts) carry over.
 - **Drawing:** pen and highlighter with three remembered presets and any custom color; smart drawing, which
   turns a sketch into a line, rectangle, ellipse, triangle or diamond with local rules
   ([`strokes.ts`](packages/shared/src/geometry/strokes.ts)) and leaves anything else as ink; an eraser that
@@ -305,6 +313,10 @@ packages/shared   Zod schemas, permissions, wire protocol, geometry, Yjs documen
 | Alt+1                           | Show all                                    |
 | G / Shift+C                     | Show grid / Show comments on board          |
 | ?                               | Shortcuts help                              |
+| Ctrl/⌘ B / I / U                | Bold / Italic / Underline                   |
+| Ctrl/⌘ Shift X                  | Strikethrough                               |
+| Ctrl/⌘ Shift > / <              | Bigger / Smaller text                       |
+| Ctrl/⌘ Shift 8 / 7              | Bulleted / Numbered list                    |
 | Ctrl/⌘ Z, Ctrl/⌘ Shift Z        | Undo / Redo                                 |
 | Ctrl/⌘ D / A / C / X / V        | Duplicate / Select all / Copy / Cut / Paste |
 | Ctrl/⌘ G, Ctrl/⌘ Shift G        | Group / Ungroup                             |

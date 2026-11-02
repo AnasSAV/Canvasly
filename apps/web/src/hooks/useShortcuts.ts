@@ -42,6 +42,10 @@ export function useShortcuts(actions: Actions, openImagePicker: () => void) {
       }
 
       if (mod) {
+        if (actions.textShortcut(e)) {
+          e.preventDefault();
+          return;
+        }
         const handled = (() => {
           if (key === 'z' && e.shiftKey) return actions.redo();
           if (key === 'z') return actions.undo();
@@ -129,13 +133,14 @@ export function useShortcuts(actions: Actions, openImagePicker: () => void) {
     };
     const onPaste = (e: ClipboardEvent) => {
       if (isEditableTarget(e)) return;
-      const files = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'));
       e.preventDefault();
-      if (files.length) {
-        void actions.insertImages(files);
-        return;
-      }
-      actions.pasteText(e.clipboardData?.getData('text/plain') || null);
+      // The clipboard is emptied when this event ends, so everything is read up front.
+      void actions.pasteContent({
+        html: e.clipboardData?.getData('text/html') ?? '',
+        text: e.clipboardData?.getData('text/plain') ?? '',
+        canva: e.clipboardData?.getData('application/x-canva') ?? '',
+        files: [...(e.clipboardData?.files ?? [])],
+      });
     };
 
     window.addEventListener('keydown', onKeyDown);
