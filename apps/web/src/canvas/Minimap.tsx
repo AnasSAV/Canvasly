@@ -18,6 +18,7 @@ function colorOf(o: BoardObject): string | null {
     case 'pen':
       return o.stroke;
     case 'image':
+    case 'pdf':
       return '#94a3b8';
     case 'text':
       return '#9ca3af';

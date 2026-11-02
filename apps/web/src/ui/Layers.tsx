@@ -54,6 +54,8 @@ function iconOf(o: BoardObject): LucideIcon {
       return o.opacity < 1 ? Highlighter : Pencil;
     case 'image':
       return ImageIcon;
+    case 'pdf':
+      return FileText;
     case 'table':
       return Table;
     case 'chart':
@@ -73,6 +75,7 @@ function iconOf(o: BoardObject): LucideIcon {
 function nameOf(o: BoardObject): string {
   if (o.type === 'frame') return o.name || 'Frame';
   if (o.type === 'chart') return o.title || 'Chart';
+  if (o.type === 'pdf') return o.title || 'Document';
   if (hasText(o)) {
     const line = o.text.split('\n').find((l) => l.trim());
     if (line) return line.trim().slice(0, 60);

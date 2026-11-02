@@ -6,6 +6,8 @@ import {
   type ChartObject,
   type ConnectorEnd,
   type ConnectorObject,
+  type DocumentObject,
+  type DocumentPage,
   type FrameObject,
   type ImageObject,
   type PenObject,
@@ -270,4 +272,36 @@ export function makeImage(
     naturalW,
     naturalH,
   };
+}
+
+export const DOCUMENT_WIDTH = 480;
+
+/** A document centered on `at`, shaped like its first page. */
+export function makeDocument(at: Vec, z: string, title: string, pages: DocumentPage[]): DocumentObject {
+  const first = pages[0]!;
+  const w = DOCUMENT_WIDTH;
+  const h = (first.h / first.w) * w;
+  return {
+    id: newId(),
+    type: 'pdf',
+    z,
+    locked: false,
+    groupId: null,
+    x: at.x - w / 2,
+    y: at.y - h / 2,
+    w,
+    h,
+    rotation: 0,
+    title: title.slice(0, 200),
+    pages,
+    page: 0,
+  };
+}
+
+/** Where a page goes inside its document's box: as large as fits, and centered. Pages can differ in size. */
+export function documentPageRect(o: Pick<DocumentObject, 'w' | 'h'>, page: DocumentPage) {
+  const scale = Math.min(o.w / page.w, o.h / page.h);
+  const w = page.w * scale;
+  const h = page.h * scale;
+  return { x: (o.w - w) / 2, y: (o.h - h) / 2, w, h };
 }

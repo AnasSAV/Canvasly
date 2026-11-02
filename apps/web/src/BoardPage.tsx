@@ -1,4 +1,4 @@
-import { BoardSummary, can, screenToWorld, type Role } from '@canvasly/shared';
+import { BoardSummary, can, type Role } from '@canvasly/shared';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { BoardCanvas } from './canvas/BoardCanvas';
 import type { Interactions } from './canvas/interactions';
@@ -22,6 +22,7 @@ import { CommentsLayer, CommentsPanel } from './ui/Comments';
 import { ContextMenu } from './ui/ContextMenu';
 import { FramesPanel, Presentation } from './ui/Frames';
 import { FollowBanner, RemoteCursors } from './ui/Presence';
+import { DropOverlay, ImportProgress, useFileDrop } from './ui/FileDrop';
 import { LayersPanel } from './ui/Layers';
 import { ObjectSizeTag, SelectionToolbar } from './ui/SelectionToolbar';
 import { ShareDialog } from './ui/ShareDialog';
@@ -251,6 +252,7 @@ function BoardView({
   const role = useLiveRole(board, meta.role);
   const canEdit = can(role, 'edit');
   board.readOnly = !canEdit;
+  const drop = useFileDrop(actions, canEdit);
   useEffect(() => {
     useUI.getState().setReadOnly(!canEdit);
     if (role !== meta.role && mode.kind === 'member') onMetaChange({ ...meta, role });
@@ -327,20 +329,7 @@ function BoardView({
   }
 
   return (
-    <div
-      className="relative h-full w-full overflow-hidden"
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => {
-        e.preventDefault();
-        if (!canEdit) return;
-        const r = e.currentTarget.getBoundingClientRect();
-        const at = screenToWorld(useViewport.getState().camera, {
-          x: e.clientX - r.left,
-          y: e.clientY - r.top,
-        });
-        void actions.insertImages([...e.dataTransfer.files], at);
-      }}
-    >
+    <div className="relative h-full w-full overflow-hidden" {...drop.handlers} data-testid="board-root">
       <BoardCanvas onInteractions={onInteractions} />
       <CommentsLayer />
       <RemoteCursors />
@@ -372,14 +361,17 @@ function BoardView({
         </>
       )}
       {shareOpen && <ShareDialog boardId={meta.id} onClose={() => setShareOpen(false)} />}
+      <ImportProgress actions={actions} />
+      {drop.over && <DropOverlay />}
       <input
         ref={fileRef}
         type="file"
-        accept="image/*"
+        accept="image/*,application/pdf,.pdf"
         multiple
         hidden
+        data-testid="file-input"
         onChange={(e) => {
-          if (e.target.files) void actions.insertImages([...e.target.files]);
+          if (e.target.files) void actions.insertFiles([...e.target.files]);
           e.target.value = '';
         }}
       />

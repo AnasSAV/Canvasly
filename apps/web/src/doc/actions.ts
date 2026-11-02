@@ -3,6 +3,7 @@ import {
   buildTemplate,
   hasText,
   makeChart,
+  makeDocument,
   makeImage,
   makeTable,
   makeText,
@@ -19,6 +20,7 @@ import { compressImage, uploadAsset } from './assets';
 import type { Board } from './board';
 import { canvaDataFromHtml, canvaToObjects } from './canvaImport';
 import { readHtml, toObjects } from './htmlImport';
+import { MAX_PDF_PAGES, PdfCancelled, pdfToPages } from './pdfImport';
 import {
   addObjects,
   bringToFront,
@@ -44,6 +46,9 @@ import {
 /** Pasted text longer than this wraps instead of running on as one line. */
 const MAX_PASTED_LINE = 640;
 
+const isPdf = (f: File) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
+const isAddable = (f: File) => f.type.startsWith('image/') || isPdf(f);
+
 /** User-level commands shared by keyboard shortcuts, toolbars and menus. */
 export function createActions(board: Board, getPointerWorld: () => Vec | null) {
   const ui = () => useUI.getState();
@@ -59,6 +64,7 @@ export function createActions(board: Board, getPointerWorld: () => Vec | null) {
       return false;
     }
   };
+  let cancelRequested = false;
   /** In-app clipboard fallback for when the system clipboard is unavailable. */
   let memoryClipboard: ClipboardPayload | null = null;
 
@@ -203,7 +209,7 @@ export function createActions(board: Board, getPointerWorld: () => Vec | null) {
       target?: Vec,
     ) => {
       if (!editable()) return;
-      const images = files.filter((f) => f.type.startsWith('image/'));
+      const images = files.filter(isAddable);
       const own = isOwnPayload(text);
       const canvaData = own ? null : canva || canvaDataFromHtml(html);
       const fromCanva = canvaData ? await canvaToObjects(board.id, canvaData) : null;
@@ -239,7 +245,7 @@ export function createActions(board: Board, getPointerWorld: () => Vec | null) {
         }
       }
       if (images.length) {
-        await actions.insertImages(images, target);
+        await actions.insertFiles(images, target);
         return;
       }
       actions.pasteText(text || null, target);
@@ -255,8 +261,8 @@ export function createActions(board: Board, getPointerWorld: () => Vec | null) {
             const blob = await item.getType(type);
             if (type === 'text/html') content.html = await blob.text();
             else if (type === 'text/plain') content.text = await blob.text();
-            else if (type.startsWith('image/')) {
-              content.files.push(new File([blob], 'pasted-image', { type }));
+            else if (type.startsWith('image/') || type === 'application/pdf') {
+              content.files.push(new File([blob], 'pasted-file', { type }));
             }
           }
         }
@@ -264,6 +270,49 @@ export function createActions(board: Board, getPointerWorld: () => Vec | null) {
       } catch {
         actions.pasteText(null, at);
       }
+    },
+
+    /** Images and PDFs, from a drop, a paste or the file picker. Anything else is turned away by name. */
+    insertFiles: async (files: File[], at?: Vec) => {
+      if (!editable()) return;
+      const refused = files.filter((f) => !isAddable(f)).map((f) => f.name);
+      if (refused.length) alert(`Only images and PDFs can be added. Skipped: ${refused.join(', ')}`);
+      await actions.insertImages(
+        files.filter((f) => f.type.startsWith('image/')),
+        at,
+      );
+      for (const pdf of files.filter(isPdf)) await actions.insertPdf(pdf, at);
+    },
+
+    /** One at a time, since each renders every page; a second drop waits its turn in `insertFiles`. */
+    insertPdf: async (file: File, at?: Vec) => {
+      if (!editable()) return;
+      const name = file.name;
+      cancelRequested = false;
+      ui().setImportProgress({ name, done: 0, total: 0 });
+      try {
+        const { pages, omitted } = await pdfToPages(
+          file,
+          board.id,
+          (p) => ui().setImportProgress({ name, ...p }),
+          () => cancelRequested,
+        );
+        const title = name.replace(/\.pdf$/i, '');
+        const doc = makeDocument(at ?? viewCenter(), nextZ(board.store), title, pages);
+        addObjects(board, [doc]);
+        ui().select([doc.id]);
+        ui().setTool('select');
+        if (omitted) {
+          alert(`Added the first ${MAX_PDF_PAGES} pages of ${name}. The other ${omitted} were left out.`);
+        }
+      } catch (err) {
+        if (!(err instanceof PdfCancelled)) alert(`Couldn't add ${name}: ${(err as Error).message}`);
+      } finally {
+        ui().setImportProgress(null);
+      }
+    },
+    cancelImport: () => {
+      cancelRequested = true;
     },
 
     insertImages: async (files: Iterable<File>, at?: Vec) => {

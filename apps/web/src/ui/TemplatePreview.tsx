@@ -98,6 +98,7 @@ export const TemplatePreview = memo(function TemplatePreview({ id }: { id: Templ
             );
           case 'pen':
           case 'image':
+          case 'pdf':
           case 'chart':
             return null;
           default:

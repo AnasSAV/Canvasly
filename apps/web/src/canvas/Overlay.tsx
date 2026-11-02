@@ -140,7 +140,8 @@ function SelectionTransformer({ stage }: { stage: Konva.Stage | null }) {
   };
 
   const textOnly = single?.type === 'text';
-  const keepRatio = single?.type === 'sticky' || single?.type === 'image' || textOnly;
+  const keepRatio =
+    single?.type === 'sticky' || single?.type === 'image' || single?.type === 'pdf' || textOnly;
   return (
     <Transformer
       ref={trRef}

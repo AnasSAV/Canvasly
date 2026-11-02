@@ -1,8 +1,9 @@
-import { cellKey, shapeTextBox } from '@canvasly/shared';
+import { cellKey, documentPageRect, shapeTextBox } from '@canvasly/shared';
 import type {
   BoardObject,
   ChartObject,
   ConnectorObject,
+  DocumentObject,
   FrameObject,
   ImageObject,
   PenObject,
@@ -13,9 +14,9 @@ import type {
 } from '@canvasly/shared';
 import type { Context } from 'konva/lib/Context';
 import type { Shape as KonvaShape } from 'konva/lib/Shape';
-import { memo, useMemo } from 'react';
+import { memo, useEffect, useMemo } from 'react';
 import { Arrow, Group, Image as KImage, Line, Path, Rect, Shape as KShape, Text } from 'react-konva';
-import { useAssetImage } from '../doc/assets';
+import { assetUrl, loadImage, useAssetImage, useDocumentPage } from '../doc/assets';
 import { useBoard } from '../doc/context';
 import { useUI } from '../state/ui';
 import { useViewport } from '../state/viewport';
@@ -195,6 +196,34 @@ const Pen = ({ o, dark }: { o: PenObject } & DetailProps) => {
   );
 };
 
+const DocumentNode = ({ o }: { o: DocumentObject }) => {
+  const board = useBoard();
+  const shown = useDocumentPage(o);
+  const page = o.pages[shown]!;
+  const img = useAssetImage(board.assetBase, page.assetId);
+  // Turning pages is instant if the next one is already here.
+  const next = o.pages[shown + 1]?.assetId;
+  useEffect(() => {
+    if (next) void loadImage(assetUrl(board.assetBase, next));
+  }, [board.assetBase, next]);
+  const r = documentPageRect(o, page);
+  return (
+    <Group {...boxGroupProps(o)}>
+      <Rect
+        x={2}
+        y={4}
+        width={o.w}
+        height={o.h}
+        fill="rgba(0,0,0,0.1)"
+        cornerRadius={2}
+        perfectDrawEnabled={false}
+      />
+      <Rect width={o.w} height={o.h} fill="#ffffff" perfectDrawEnabled={false} />
+      {img && <KImage image={img} x={r.x} y={r.y} width={r.w} height={r.h} perfectDrawEnabled={false} />}
+    </Group>
+  );
+};
+
 const ImageNode = ({ o }: { o: ImageObject }) => {
   const img = useAssetImage(useBoard().assetBase, o.assetId);
   return (
@@ -334,6 +363,8 @@ export const ObjectNode = memo(function ObjectNode(
       return <Pen {...props} o={o} />;
     case 'image':
       return <ImageNode o={o} />;
+    case 'pdf':
+      return <DocumentNode o={o} />;
     case 'frame':
       return <Frame {...props} o={o} />;
     case 'table':

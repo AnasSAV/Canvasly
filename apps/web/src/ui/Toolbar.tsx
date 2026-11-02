@@ -215,7 +215,7 @@ function CreatePanel({
       />
       <div className="my-1 h-px bg-gray-200 dark:bg-zinc-700" />
       <PanelItem
-        label="Upload image"
+        label="Upload image or PDF"
         icon={<ImagePlus size={18} />}
         testId="tool-image"
         onClick={() => {
@@ -473,7 +473,7 @@ function MorePanel({
       </div>
       <div className="my-1 h-px bg-gray-200 dark:bg-zinc-700" />
       <PanelItem
-        label="Upload image"
+        label="Upload image or PDF"
         icon={<ImagePlus size={18} />}
         onClick={() => {
           onImage();

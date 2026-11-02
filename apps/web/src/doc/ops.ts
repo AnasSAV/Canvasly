@@ -9,6 +9,7 @@ import {
   isShapeObject,
   keyAbove,
   keysAbove,
+  makeImage,
   makeShape,
   makeSticky,
   makeText,
@@ -22,6 +23,7 @@ import {
   type BoardObject,
   type ClipboardPayload,
   type ConnectorEnd,
+  type DocumentObject,
   type ObjectPatch,
   type Rect,
   type ShapeKind,
@@ -360,4 +362,25 @@ export function textShortcut(board: Board, ids: string[], e: KeyboardEvent | Rea
     return true;
   }
   return false;
+}
+
+/** Lay a document's pages out on the board as separate images, beside it. Returns their ids. */
+export function spreadDocument(board: Board, o: DocumentObject): string[] {
+  const COLUMNS = 5;
+  const GAP = 40;
+  const pageW = o.w;
+  const rowH = Math.max(...o.pages.map((p) => (p.h / p.w) * pageW));
+  const keys = keysAbove(board.store.getSorted().at(-1)?.z ?? null, o.pages.length);
+  const images = o.pages.map((p, i) => {
+    const img = makeImage({ x: 0, y: 0 }, keys[i]!, p.assetId, p.w, p.h);
+    return {
+      ...img,
+      x: o.x + o.w + GAP + (i % COLUMNS) * (pageW + GAP),
+      y: o.y + Math.floor(i / COLUMNS) * (rowH + GAP),
+      w: pageW,
+      h: (p.h / p.w) * pageW,
+    };
+  });
+  addObjects(board, images);
+  return images.map((i) => i.id);
 }

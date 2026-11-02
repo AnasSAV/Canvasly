@@ -158,6 +158,14 @@ verification`, plus `boards (… link_role, link_token)`, `board_members (board_
 **Durable Object SQLite**: `doc_snapshot (seq, data)` chunks (< 2 MB rows), `doc_updates` log,
 `assets (id, mime, bytes, data)`, `comment_threads (id, x, y, resolved)` and `comments`.
 
+### PDFs
+
+R2 is off the table and assets are capped at 1 MB, so a PDF isn't stored as a file. Its pages are rendered in the
+browser with pdf.js, which is only downloaded when someone adds a PDF, compressed to WebP at up to 2000 px, and
+uploaded as ordinary assets (first 100 pages, up to a 100 MB file). A `document` object then holds the page list,
+and shows one at a time with page turning in the selection toolbar. Pages are pictures, so their text can't be
+selected or searched, and the original file can't be recovered: "Download as PDF" rebuilds one from the images.
+
 ### Images and the size trade-off
 
 R2 needs a payment method on file, so images are stored as BLOBs in the board's Durable Object. To keep

@@ -1,4 +1,4 @@
-import { BoardExport, compareZ, type BoardObject, type Rect } from '@canvasly/shared';
+import { BoardExport, compareZ, type BoardObject, type DocumentObject, type Rect } from '@canvasly/shared';
 import { renderRegion } from '../canvas/renderer2d';
 import { assetUrl, uploadAsset } from '../doc/assets';
 import type { Board } from '../doc/board';
@@ -69,14 +69,38 @@ const blobToDataUrl = (blob: Blob) =>
     r.readAsDataURL(blob);
   });
 
+/** A document's pages back as a PDF. They're images on the board, so its text can't be selected in the result. */
+export async function exportDocumentPdf(board: Board, o: DocumentObject) {
+  const { jsPDF } = await import('jspdf');
+  let doc: InstanceType<typeof jsPDF> | null = null;
+  for (const page of o.pages) {
+    const res = await fetch(assetUrl(board.assetBase, page.assetId));
+    if (!res.ok) throw new Error('A page of this document could not be loaded');
+    const bitmap = await createImageBitmap(await res.blob());
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    canvas.getContext('2d')!.drawImage(bitmap, 0, 0);
+    bitmap.close();
+    const orientation = page.w >= page.h ? 'landscape' : 'portrait';
+    if (!doc) doc = new jsPDF({ orientation, unit: 'pt', format: [page.w, page.h], compress: true });
+    else doc.addPage([page.w, page.h], orientation);
+    doc.addImage(canvas.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, page.w, page.h);
+  }
+  doc?.save(`${safeName(o.title)}.pdf`);
+}
+
 /** Portable JSON (objects + embedded images) that can be imported into any board. */
 export async function exportJson(board: Board, title: string) {
   const objects = board.store.getSorted();
   const assets: Record<string, string> = {};
   for (const o of objects) {
-    if (o.type !== 'image' || assets[o.assetId]) continue;
-    const res = await fetch(assetUrl(board.assetBase, o.assetId));
-    if (res.ok) assets[o.assetId] = await blobToDataUrl(await res.blob());
+    const ids = o.type === 'image' ? [o.assetId] : o.type === 'pdf' ? o.pages.map((p) => p.assetId) : [];
+    for (const id of ids) {
+      if (assets[id]) continue;
+      const res = await fetch(assetUrl(board.assetBase, id));
+      if (res.ok) assets[id] = await blobToDataUrl(await res.blob());
+    }
   }
   const file: BoardExport = {
     kind: 'canvasly/board',
@@ -106,10 +130,17 @@ export async function importJson(board: Board, file: File, at: { x: number; y: n
   }
   const remapped: BoardObject[] = [];
   for (const o of objects) {
-    if (o.type !== 'image') remapped.push(o);
-    else {
+    if (o.type === 'image') {
       const assetId = assetMap.get(o.assetId);
       if (assetId) remapped.push({ ...o, assetId }); // images missing from the file are dropped
+    } else if (o.type === 'pdf') {
+      const pages = o.pages.flatMap((p) => {
+        const assetId = assetMap.get(p.assetId);
+        return assetId ? [{ ...p, assetId }] : [];
+      });
+      if (pages.length) remapped.push({ ...o, pages, page: 0 });
+    } else {
+      remapped.push(o);
     }
   }
   return pastePayload(board, { kind: 'canvasly/objects', version: 1, objects: remapped }, at);

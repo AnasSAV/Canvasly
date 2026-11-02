@@ -1,6 +1,7 @@
-import { MAX_ASSET_BYTES } from '@canvasly/shared';
+import { MAX_ASSET_BYTES, type DocumentObject } from '@canvasly/shared';
 import { useEffect, useState } from 'react';
 import { ApiError } from '../lib/api';
+import { useUI } from '../state/ui';
 
 /**
  * Images are stored in the board's Durable Object SQLite (no R2: it needs a card on file). To keep that
@@ -29,10 +30,16 @@ async function decode(blob: Blob): Promise<ImageBitmap | HTMLImageElement> {
 /** Downscale to MAX_IMAGE_SIDE and re-encode as WebP, lowering quality/size until under MAX_ASSET_BYTES. */
 export async function compressImage(file: Blob): Promise<{ blob: Blob; width: number; height: number }> {
   if (file.size > MAX_INPUT_BYTES) throw new Error('Image is larger than 25 MB');
-  const src = await decode(file);
+  return compressBitmap(await decode(file), MAX_IMAGE_SIDE);
+}
+
+export async function compressBitmap(
+  src: ImageBitmap | HTMLImageElement | HTMLCanvasElement,
+  maxSide: number,
+): Promise<{ blob: Blob; width: number; height: number }> {
   const srcW = src.width;
   const srcH = src.height;
-  let scale = Math.min(1, MAX_IMAGE_SIDE / Math.max(srcW, srcH));
+  let scale = Math.min(1, maxSide / Math.max(srcW, srcH));
   for (let attempt = 0; attempt < 6; attempt++) {
     const width = Math.max(1, Math.round(srcW * scale));
     const height = Math.max(1, Math.round(srcH * scale));
@@ -88,6 +95,17 @@ export function loadImage(url: string): Promise<HTMLImageElement | null> {
 
 /** Already-decoded image for synchronous drawing (thumbnails), or null. */
 export const getLoadedImage = (url: string) => loaded.get(url) ?? null;
+
+/**
+ * The page of a document on show here. Anyone who can change it sees the saved page, so that others turning it move
+ * them along too. Viewers, and anyone looking at a locked document, can't save theirs, so it stays their own.
+ */
+export function useDocumentPage(o: DocumentObject): number {
+  const own = useUI((s) => s.documentPages[o.id]);
+  const readOnly = useUI((s) => s.readOnly);
+  const page = readOnly || o.locked ? (own ?? o.page) : o.page;
+  return Math.max(0, Math.min(o.pages.length - 1, page));
+}
 
 export function useAssetImage(base: string, assetId: string): HTMLImageElement | null {
   const url = assetUrl(base, assetId);

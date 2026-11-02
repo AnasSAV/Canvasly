@@ -9,6 +9,7 @@ import {
   worldToScreen,
   type BoardObject,
   type ConnectorObject,
+  type DocumentObject,
   type FontId,
   type ListKind,
   type ObjectPatch,
@@ -21,9 +22,13 @@ import {
   Bold,
   ChartColumn,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
   Columns2,
+  Copy,
   CornerDownRight,
+  Download,
   EllipsisVertical,
   Group,
   Highlighter,
@@ -55,7 +60,9 @@ import type { Actions } from '../doc/actions';
 import { ROTATE_ANCHOR_OFFSET } from '../canvas/Overlay';
 import { SHAPE_LABELS } from '../canvas/shapePaths';
 import { FONTS, FONT_MENU, MAX_FONT_SIZE, ensureFont, stepFontSize } from '../canvas/text';
+import { useDocumentPage } from '../doc/assets';
 import { useBoard, useDocVersion } from '../doc/context';
+import { exportDocumentPdf } from '../lib/exporters';
 import {
   addTableColumn,
   addTableRow,
@@ -63,7 +70,9 @@ import {
   deleteTableColumn,
   deleteTableRow,
   restyleText,
+  patch,
   selectionBounds,
+  spreadDocument,
   updateEach,
   type ConvertTarget,
 } from '../doc/ops';
@@ -248,8 +257,9 @@ function FontSizeControl({ value, onChange }: { value: number; onChange: (size: 
         }}
         onBlur={(e) => {
           const n = Math.round(Number(e.currentTarget.value));
-          if (Number.isFinite(n) && n > 0 && n !== size) onChange(Math.min(MAX_FONT_SIZE, Math.max(4, n)));
-          else e.currentTarget.value = String(size);
+          const next = Number.isFinite(n) && n > 0 ? Math.min(MAX_FONT_SIZE, Math.max(4, n)) : size;
+          if (next !== size) onChange(next);
+          e.currentTarget.value = String(next);
         }}
         className="h-8 w-9 rounded-md bg-transparent text-center text-sm tabular-nums outline-none hover:bg-gray-100 focus:bg-gray-100 dark:hover:bg-zinc-800 dark:focus:bg-zinc-800"
         data-testid="font-size"
@@ -454,6 +464,83 @@ function MoreMenu({ actions, title }: { actions: Actions; title: string }) {
         </Dropdown>
       )}
     </div>
+  );
+}
+
+/** Page turning, for viewers too, plus putting the pages on the board and getting the PDF back. */
+function DocumentControls({ o }: { o: DocumentObject }) {
+  const board = useBoard();
+  const readOnly = useUI((s) => s.readOnly);
+  const shown = useDocumentPage(o);
+  const last = o.pages.length - 1;
+  const go = (page: number) => {
+    const next = Math.max(0, Math.min(last, page));
+    useUI.getState().setDocumentPage(o.id, next);
+    if (!readOnly && !o.locked) patch(board, o.id, { page: next });
+  };
+  return (
+    <>
+      <span className="max-w-36 truncate px-2 text-sm font-medium" title={o.title} data-testid="doc-title">
+        {o.title}
+      </span>
+      <IconButton
+        label="Previous page"
+        disabled={shown === 0}
+        onClick={() => go(shown - 1)}
+        data-testid="doc-prev"
+      >
+        <ChevronLeft size={18} />
+      </IconButton>
+      <input
+        key={shown}
+        defaultValue={shown + 1}
+        inputMode="numeric"
+        aria-label="Page number"
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === 'Enter') e.currentTarget.blur();
+        }}
+        onBlur={(e) => {
+          const n = Math.round(Number(e.currentTarget.value));
+          const target = Number.isFinite(n) && n >= 1 ? Math.min(n - 1, last) : shown;
+          if (target !== shown) go(target);
+          e.currentTarget.value = String(target + 1);
+        }}
+        className="h-8 w-9 rounded-md bg-transparent text-center text-sm font-medium tabular-nums outline-none hover:bg-gray-100 focus:bg-gray-100 dark:hover:bg-zinc-800 dark:focus:bg-zinc-800"
+        data-testid="doc-page"
+      />
+      <span
+        className="pr-1 text-sm whitespace-nowrap text-gray-500 dark:text-zinc-400"
+        data-testid="doc-count"
+      >
+        of {o.pages.length}
+      </span>
+      <IconButton
+        label="Next page"
+        disabled={shown >= last}
+        onClick={() => go(shown + 1)}
+        data-testid="doc-next"
+      >
+        <ChevronRight size={18} />
+      </IconButton>
+      <Divider />
+      {!readOnly && (
+        <IconButton
+          label="Show all pages on the board"
+          onClick={() => useUI.getState().select(spreadDocument(board, o))}
+          data-testid="doc-spread"
+        >
+          <Copy size={18} />
+        </IconButton>
+      )}
+      <IconButton
+        label="Download as PDF"
+        onClick={() => void exportDocumentPdf(board, o).catch((e: Error) => alert(e.message))}
+        data-testid="doc-download"
+      >
+        <Download size={18} />
+      </IconButton>
+    </>
   );
 }
 
@@ -858,6 +945,7 @@ function ToolbarBody({
   const board = useBoard();
   const camera = useViewport((s) => s.camera);
   const viewWidth = useViewport((s) => s.width);
+  const readOnly = useUI((s) => s.readOnly);
   const [open, setOpen] = useState<string | null>(null);
   const [toolbarWidth, setToolbarWidth] = useState(440);
   const root = useRef<HTMLDivElement>(null);
@@ -898,6 +986,8 @@ function ToolbarBody({
 
   const locked = objs.every((o) => o.locked);
   const grouped = objs.some((o) => o.groupId);
+  const only = objs.length === 1 ? objs[0] : undefined;
+  const pdfObject = only?.type === 'pdf' ? only : null;
   return (
     <OpenMenu.Provider value={{ open, setOpen }}>
       <div
@@ -907,8 +997,11 @@ function ToolbarBody({
         onPointerDown={(e) => e.stopPropagation()}
         data-testid="selection-toolbar"
       >
-        {!locked && <StyleControls objs={objs} ids={ids} />}
+        {pdfObject && <DocumentControls o={pdfObject} />}
+        {pdfObject && <Divider />}
+        {!locked && !readOnly && <StyleControls objs={objs} ids={ids} />}
         {!locked &&
+          !readOnly &&
           (grouped ? (
             <IconButton label="Ungroup (Ctrl Shift G)" onClick={actions.ungroup}>
               <Ungroup size={18} />
@@ -920,7 +1013,7 @@ function ToolbarBody({
               </IconButton>
             )
           ))}
-        {!board.anonymous && (
+        {!board.anonymous && !readOnly && (
           <IconButton
             label="Comment"
             onClick={() => useUI.getState().setCommentDraft({ x: bounds.x + bounds.w, y: bounds.y })}
@@ -929,14 +1022,18 @@ function ToolbarBody({
             <MessageCircleMore size={18} />
           </IconButton>
         )}
-        <IconButton
-          label={locked ? 'Unlock (Ctrl Shift L)' : 'Lock (Ctrl Shift L)'}
-          active={locked}
-          onClick={actions.toggleLock}
-        >
-          {locked ? <Lock size={18} /> : <LockOpen size={18} />}
-        </IconButton>
-        <MoreMenu actions={actions} title={title} />
+        {!readOnly && (
+          <>
+            <IconButton
+              label={locked ? 'Unlock (Ctrl Shift L)' : 'Lock (Ctrl Shift L)'}
+              active={locked}
+              onClick={actions.toggleLock}
+            >
+              {locked ? <Lock size={18} /> : <LockOpen size={18} />}
+            </IconButton>
+            <MoreMenu actions={actions} title={title} />
+          </>
+        )}
       </div>
     </OpenMenu.Provider>
   );
@@ -951,7 +1048,9 @@ export function SelectionToolbar({ actions, title }: { actions: Actions; title: 
   const editingCell = useUI((s) => s.editingCell);
   const readOnly = useUI((s) => s.readOnly);
   const objs = selectedIds.map((id) => board.store.get(id)).filter((o) => o !== undefined);
-  if (!objs.length || interacting || editingId || editingCell || readOnly) return null;
+  // Viewers only get a toolbar for turning the pages of a document.
+  const viewerUse = objs.length === 1 && objs[0]?.type === 'pdf';
+  if (!objs.length || interacting || editingId || editingCell || (readOnly && !viewerUse)) return null;
   return (
     <ToolbarBody key={selectedIds.join()} objs={objs} ids={selectedIds} actions={actions} title={title} />
   );

@@ -1,5 +1,6 @@
 import {
   MAX_THUMBNAIL_BYTES,
+  documentPageRect,
   isShapeObject,
   shapeTextBox,
   toRad,
@@ -166,6 +167,17 @@ function drawObject(ctx: CanvasRenderingContext2D, o: BoardObject, store: DocSto
     case 'chart':
       drawChart(ctx, o, { dark: false });
       break;
+    case 'pdf': {
+      const page = o.pages[Math.min(o.page, o.pages.length - 1)]!;
+      const img = getLoadedImage(assetUrl(assetBase, page.assetId));
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, o.w, o.h);
+      if (img) {
+        const r = documentPageRect(o, page);
+        ctx.drawImage(img, r.x, r.y, r.w, r.h);
+      }
+      break;
+    }
     case 'image': {
       const img = getLoadedImage(assetUrl(assetBase, o.assetId));
       if (img) ctx.drawImage(img, 0, 0, o.w, o.h);
@@ -201,7 +213,12 @@ function drawObject(ctx: CanvasRenderingContext2D, o: BoardObject, store: DocSto
 /** Make sure every image in the list is decoded so it can be drawn synchronously. */
 export async function preloadImages(objects: Iterable<BoardObject>, assetBase: string) {
   const urls = new Set<string>();
-  for (const o of objects) if (o.type === 'image') urls.add(assetUrl(assetBase, o.assetId));
+  for (const o of objects) {
+    if (o.type === 'image') urls.add(assetUrl(assetBase, o.assetId));
+    if (o.type === 'pdf') {
+      urls.add(assetUrl(assetBase, o.pages[Math.min(o.page, o.pages.length - 1)]!.assetId));
+    }
+  }
   await Promise.all([...urls].map((u) => loadImage(u)));
 }
 

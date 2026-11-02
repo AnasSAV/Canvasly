@@ -88,6 +88,10 @@ interface UIState {
   /** Awareness client id whose viewport we mirror ("follow user"), or null. */
   followingClientId: number | null;
   stickyColor: string;
+  /** A PDF being turned into pages. */
+  importProgress: { name: string; done: number; total: number } | null;
+  /** The page a viewer has turned to, for those who can't change it for everyone. */
+  documentPages: Record<string, number>;
 
   setTool: (tool: Tool) => void;
   select: (ids: string[]) => void;
@@ -115,6 +119,8 @@ interface UIState {
   setLayerHover: (ids: string[]) => void;
   setPresenting: (i: number | null) => void;
   setStickyColor: (c: string) => void;
+  setImportProgress: (p: UIState['importProgress']) => void;
+  setDocumentPage: (id: string, page: number) => void;
 }
 
 const sameIds = (a: string[], b: string[]) => a.length === b.length && a.every((id, i) => id === b[i]);
@@ -148,6 +154,8 @@ export const useUI = create<UIState>()((set, get) => ({
   layerHover: [],
   presenting: null,
   stickyColor: STICKY_COLORS[0],
+  importProgress: null,
+  documentPages: {},
 
   setTool: (tool) => set({ tool, editingId: null, editingCell: null, draft: null }),
   select: (ids) => {
@@ -188,4 +196,6 @@ export const useUI = create<UIState>()((set, get) => ({
   },
   setPresenting: (presenting) => set({ presenting, selectedIds: [], editingId: null }),
   setStickyColor: (stickyColor) => set({ stickyColor }),
+  setImportProgress: (importProgress) => set({ importProgress }),
+  setDocumentPage: (id, page) => set((s) => ({ documentPages: { ...s.documentPages, [id]: page } })),
 }));

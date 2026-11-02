@@ -149,6 +149,19 @@ export const ImageObject = Box.extend({
   naturalH: z.number().positive(),
 });
 
+/**
+ * A multi-page document, like a PDF. Its pages are images, with their size in points, drawn to fit inside the box.
+ */
+export const DocumentObject = Box.extend({
+  type: z.literal('pdf'),
+  title: z.string().max(200),
+  pages: z
+    .array(z.object({ assetId: z.string().min(1), w: z.number().positive(), h: z.number().positive() }))
+    .min(1),
+  /** Index of the page on show. */
+  page: z.number().int().min(0).default(0),
+});
+
 /** Named area; objects inside move with it and it's a page in presentation mode / PDF export. */
 export const FrameObject = Box.extend({
   type: z.literal('frame'),
@@ -210,6 +223,7 @@ export const BoardObject = z.discriminatedUnion('type', [
   ShapeObject,
   PenObject,
   ImageObject,
+  DocumentObject,
   ConnectorObject,
   FrameObject,
   TableObject,
@@ -221,6 +235,8 @@ export type TextObject = z.infer<typeof TextObject>;
 export type ShapeObject = z.infer<typeof ShapeObject>;
 export type PenObject = z.infer<typeof PenObject>;
 export type ImageObject = z.infer<typeof ImageObject>;
+export type DocumentObject = z.infer<typeof DocumentObject>;
+export type DocumentPage = DocumentObject['pages'][number];
 export type ConnectorObject = z.infer<typeof ConnectorObject>;
 export type FrameObject = z.infer<typeof FrameObject>;
 export type TableObject = z.infer<typeof TableObject>;
