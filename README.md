@@ -102,46 +102,6 @@ The [architecture notes](docs/ARCHITECTURE.md) cover sync, permissions, the data
 | Validation    | [Zod](https://zod.dev) schemas, shared between browser and server                                                                           |
 | Quality       | Strict TypeScript, ESLint, Prettier, [Vitest](https://vitest.dev), [Playwright](https://playwright.dev), CodeQL                             |
 
-## By the numbers
-
-Measured at v1.0.0. The numbers come from [`scripts/repo-stats.mjs`](scripts/repo-stats.mjs) and the test runners, so they
-can be checked.
-
-```mermaid
-pie showData title Lines of TypeScript
-    "Web app" : 12937
-    "Tests" : 3656
-    "Shared library" : 2525
-    "Worker" : 1303
-```
-
-```mermaid
-%%{init: {"themeVariables": {"xyChart": {"plotColorPalette": "#4262ff"}}}}%%
-xychart-beta
-    title "Browser tests per area (82 in total)"
-    x-axis ["Paste", "Redesign", "Text", "PDFs", "Connect", "Lines", "Sharing", "Backend", "Canvas", "Home", "Layers", "Collab"]
-    y-axis "Tests" 0 --> 14
-    bar [12, 10, 10, 9, 7, 7, 6, 5, 5, 5, 5, 1]
-```
-
-```mermaid
-%%{init: {"themeVariables": {"xyChart": {"plotColorPalette": "#4262ff"}}}}%%
-xychart-beta
-    title "JavaScript by when it loads, gzipped KB"
-    x-axis ["App (every visit)", "PDF renderer (adding a PDF)", "PDF export (exporting)"]
-    y-axis "KB" 0 --> 600
-    bar [322, 493, 229]
-```
-
-| Check                | Count | Where                                                                |
-| -------------------- | ----: | -------------------------------------------------------------------- |
-| Unit tests           |   119 | Vitest: geometry, CRDT model, permissions, clipboard parsing, email  |
-| Browser tests        |    82 | Playwright: real browsers against a local Worker and Durable Objects |
-| Shape kinds          |    18 | [`objects.ts`](packages/shared/src/schemas/objects.ts)               |
-| Fonts                |    28 | Self-hosted, loaded only when used                                   |
-| Templates            |    15 | [`templates.ts`](packages/shared/src/model/templates.ts)             |
-| Monthly hosting cost |    $0 | [Free-tier limits](docs/DEPLOYMENT.md#free-tier-limits-we-rely-on)   |
-
 ## Quick start
 
 You need [Node.js 22 or later](https://nodejs.org) and [pnpm](https://pnpm.io) (`npm install -g pnpm`).
