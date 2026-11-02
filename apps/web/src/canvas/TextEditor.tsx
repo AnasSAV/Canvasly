@@ -11,7 +11,7 @@ import {
 } from '@canvasly/shared';
 import { useLayoutEffect, useRef } from 'react';
 import { useBoard, useDocVersion } from '../doc/context';
-import { deleteObjects, moveTableCell, setCell, textShortcut } from '../doc/ops';
+import { deleteObjects, moveTableCell, patch, setCell, textShortcut } from '../doc/ops';
 import { useTheme } from '../state/theme';
 import { useUI } from '../state/ui';
 import { useViewport } from '../state/viewport';
@@ -28,6 +28,7 @@ import {
   textDecoration,
   useFontEpoch,
 } from './text';
+import { LINE_LABEL_SIZE } from './shapes';
 import { cellPadding, cellRect } from './widgets';
 
 /** Text layout for an object, in world units: where the text goes inside the box, and how it looks. */
@@ -262,6 +263,58 @@ export function CellEditor() {
         lineHeight: LINE_HEIGHT,
         color: ink('#1a1a1a', dark),
       }}
+    />
+  );
+}
+
+/** Label on a line, typed right where it will sit. Saved as it's typed, as other text is. */
+export function LineLabelEditor() {
+  const board = useBoard();
+  useDocVersion(board);
+  const id = useUI((s) => s.editingLabelId);
+  const camera = useViewport((s) => s.camera);
+  const ref = useRef<HTMLInputElement>(null);
+  const obj = id ? board.store.get(id) : undefined;
+  const line = obj?.type === 'connector' ? obj : null;
+  const resolved = line ? board.store.resolve(line) : null;
+
+  useLayoutEffect(() => {
+    ref.current?.focus();
+    ref.current?.select();
+  }, [id]);
+
+  if (!line || !resolved) return null;
+  const at = worldToScreen(camera, resolved.mid);
+  const finish = () => {
+    useUI.getState().setEditingLabel(null);
+    board.undo.stopCapturing();
+  };
+  return (
+    <input
+      ref={ref}
+      value={line.label}
+      maxLength={500}
+      placeholder="Add text"
+      aria-label="Line text"
+      spellCheck={false}
+      onChange={(e) => patch(board, line.id, { label: e.target.value })}
+      onBlur={finish}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === 'Escape' || e.key === 'Enter') {
+          e.preventDefault();
+          finish();
+        }
+      }}
+      className="absolute -translate-x-1/2 -translate-y-1/2 rounded border border-indigo-400 bg-white px-1 text-center outline-none dark:bg-zinc-800"
+      style={{
+        left: at.x,
+        top: at.y,
+        fontSize: Math.max(11, LINE_LABEL_SIZE * camera.zoom),
+        width: `${Math.max(8, line.label.length + 2)}ch`,
+        fontFamily: FONT_FAMILY,
+      }}
+      data-testid="line-label-input"
     />
   );
 }

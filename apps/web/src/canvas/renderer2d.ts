@@ -12,6 +12,8 @@ import {
 import { assetUrl, getLoadedImage, loadImage } from '../doc/assets';
 import type { DocStore } from '../doc/store';
 import { freehandPath } from './freehand';
+import { drawLine } from './lineDraw';
+import { LINE_LABEL_SIZE } from './shapes';
 import { traceShape } from './shapePaths';
 import { drawChart, drawTable } from './widgets';
 import {
@@ -24,6 +26,7 @@ import {
   autoFontSize,
   ensureFonts,
   fontStyle,
+  measureText,
   measureWith,
   textLineRects,
 } from './text';
@@ -66,38 +69,30 @@ function drawText(
   });
 }
 
-function arrowHead(
-  ctx: CanvasRenderingContext2D,
-  fromX: number,
-  fromY: number,
-  x: number,
-  y: number,
-  size: number,
-) {
-  const a = Math.atan2(y - fromY, x - fromX);
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.lineTo(x - size * Math.cos(a - Math.PI / 7), y - size * Math.sin(a - Math.PI / 7));
-  ctx.lineTo(x - size * Math.cos(a + Math.PI / 7), y - size * Math.sin(a + Math.PI / 7));
-  ctx.closePath();
-  ctx.fill();
-}
-
 function drawObject(ctx: CanvasRenderingContext2D, o: BoardObject, store: DocStore, assetBase: string) {
   if (o.type === 'connector') {
     const r = store.resolve(o);
     if (!r) return;
-    const pts = r.points;
-    ctx.strokeStyle = ctx.fillStyle = o.stroke;
-    ctx.lineWidth = o.strokeWidth;
-    ctx.lineCap = ctx.lineJoin = 'round';
-    ctx.beginPath();
-    for (let i = 0; i + 1 < pts.length; i += 2) ctx.lineTo(pts[i]!, pts[i + 1]!);
-    ctx.stroke();
-    const head = 6 + o.strokeWidth * 3;
-    const n = pts.length;
-    if (o.endCap === 'arrow') arrowHead(ctx, pts[n - 4]!, pts[n - 3]!, pts[n - 2]!, pts[n - 1]!, head);
-    if (o.startCap === 'arrow') arrowHead(ctx, pts[2]!, pts[3]!, pts[0]!, pts[1]!, head);
+    drawLine(ctx, r.points, {
+      color: o.stroke,
+      width: o.strokeWidth,
+      dash: o.dash,
+      startCap: o.startCap,
+      endCap: o.endCap,
+    });
+    const label = o.label.trim();
+    if (label) {
+      const { mid } = r;
+      const w = measureText(label, LINE_LABEL_SIZE) + 12;
+      const h = LINE_LABEL_SIZE * LINE_HEIGHT + 4;
+      ctx.fillStyle = BACKGROUND;
+      ctx.fillRect(mid.x - w / 2, mid.y - h / 2, w, h);
+      ctx.fillStyle = o.stroke;
+      ctx.font = `${LINE_LABEL_SIZE}px ${FONT_FAMILY}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, mid.x, mid.y);
+    }
     return;
   }
   ctx.save();

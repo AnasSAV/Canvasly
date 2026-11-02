@@ -11,17 +11,19 @@ import type {
   StickyObject,
   TableObject,
   TextObject,
+  Vec,
 } from '@canvasly/shared';
 import type { Context } from 'konva/lib/Context';
 import type { Shape as KonvaShape } from 'konva/lib/Shape';
 import { memo, useEffect, useMemo } from 'react';
-import { Arrow, Group, Image as KImage, Line, Path, Rect, Shape as KShape, Text } from 'react-konva';
+import { Group, Image as KImage, Path, Rect, Shape as KShape, Text } from 'react-konva';
 import { assetUrl, loadImage, useAssetImage, useDocumentPage } from '../doc/assets';
 import { useBoard } from '../doc/context';
 import { useUI } from '../state/ui';
 import { useViewport } from '../state/viewport';
 import { canvasColors, ink, paper } from './colors';
 import { freehandPath } from './freehand';
+import { drawLine } from './lineDraw';
 import { traceShape } from './shapePaths';
 import {
   FONTS,
@@ -32,6 +34,7 @@ import {
   TEXT_BACKGROUND_PADDING,
   autoFontSize,
   fontStyle,
+  measureText,
   textDecoration,
   textLineRects,
 } from './text';
@@ -312,38 +315,71 @@ const Frame = ({ o, dark }: { o: FrameObject } & DetailProps) => {
 
 const samePoints = (a: number[], b: number[]) => a.length === b.length && a.every((v, i) => v === b[i]);
 
+/** A line's label, on a patch of the background so that the line doesn't run through the words. */
+export const LINE_LABEL_SIZE = 16;
+
 export const ConnectorNode = memo(
   function ConnectorNode({
     o,
     points,
+    mid,
     dark = false,
   }: {
-    o: Pick<ConnectorObject, 'id' | 'stroke' | 'strokeWidth' | 'startCap' | 'endCap'>;
+    o: Pick<ConnectorObject, 'id' | 'stroke' | 'strokeWidth' | 'startCap' | 'endCap' | 'dash' | 'label'>;
     points: number[];
+    mid: Vec;
     dark?: boolean;
   }) {
     const color = ink(o.stroke, dark);
-    const props = {
-      id: o.id,
-      name: 'object',
-      points,
-      stroke: color,
-      fill: color,
-      strokeWidth: o.strokeWidth,
-      lineCap: 'round' as const,
-      lineJoin: 'round' as const,
-      listening: false,
-      perfectDrawEnabled: false,
-    };
-    if (o.startCap === 'none' && o.endCap === 'none') return <Line {...props} />;
+    const label = o.label.trim();
+    const labelW = label ? measureText(label, LINE_LABEL_SIZE) + 12 : 0;
+    const labelH = LINE_LABEL_SIZE * LINE_HEIGHT + 4;
     return (
-      <Arrow
-        {...props}
-        pointerAtBeginning={o.startCap === 'arrow'}
-        pointerAtEnding={o.endCap === 'arrow'}
-        pointerLength={6 + o.strokeWidth * 3}
-        pointerWidth={6 + o.strokeWidth * 3}
-      />
+      <>
+        <KShape
+          id={o.id}
+          name="object"
+          listening={false}
+          perfectDrawEnabled={false}
+          sceneFunc={(c: Context) => {
+            drawLine(native(c), points, {
+              color,
+              width: o.strokeWidth,
+              dash: o.dash,
+              startCap: o.startCap,
+              endCap: o.endCap,
+            });
+          }}
+        />
+        {label && (
+          <>
+            <Rect
+              x={mid.x - labelW / 2}
+              y={mid.y - labelH / 2}
+              width={labelW}
+              height={labelH}
+              cornerRadius={3}
+              fill={canvasColors(dark).background}
+              listening={false}
+              perfectDrawEnabled={false}
+            />
+            <Text
+              x={mid.x - labelW / 2}
+              y={mid.y - labelH / 2 + 2}
+              width={labelW}
+              text={label}
+              fontSize={LINE_LABEL_SIZE}
+              fontFamily={FONT_FAMILY}
+              lineHeight={LINE_HEIGHT}
+              fill={color}
+              align="center"
+              wrap="none"
+              listening={false}
+              perfectDrawEnabled={false}
+            />
+          </>
+        )}
+      </>
     );
   },
   (a, b) => a.o === b.o && a.dark === b.dark && samePoints(a.points, b.points),

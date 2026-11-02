@@ -233,6 +233,26 @@ function ConnectorSelection({ zoom }: { zoom: number }) {
             />
           );
         })}
+      {conns.length === 1 &&
+        !conns[0]!.locked &&
+        !useUI.getState().readOnly &&
+        (() => {
+          const c = conns[0]!;
+          const r = board.store.resolve(c);
+          if (!r) return null;
+          return (
+            <Circle
+              x={r.mid.x}
+              y={r.mid.y}
+              radius={5 / zoom}
+              fill={ACCENT}
+              stroke="#fff"
+              strokeWidth={1.5 / zoom}
+              hitStrokeWidth={14 / zoom}
+              connectorMid={c.id}
+            />
+          );
+        })()}
     </>
   );
 }
@@ -322,8 +342,11 @@ function Draft({ zoom }: { zoom: number }) {
             strokeWidth: 2,
             startCap: 'none',
             endCap: draft.arrow ? 'arrow' : 'none',
+            dash: 'solid',
+            label: '',
           }}
           points={r.points}
+          mid={r.mid}
         />
       );
     }

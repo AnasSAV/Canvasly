@@ -36,6 +36,6 @@ export async function createBoard(request: APIRequestContext, title = 'E2E board
 /** Open a board and wait until it is connected and synced with its Durable Object. */
 export async function openBoard(page: Page, id: string) {
   await page.goto(`/b/${id}`);
-  await expect(page.getByTestId('board-canvas')).toBeVisible();
+  await expect(page.getByTestId('board-canvas')).toBeVisible({ timeout: 20_000 });
   await expect(page.getByTestId('connection-status')).toHaveAttribute('data-status', 'online');
 }

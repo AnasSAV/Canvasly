@@ -12,7 +12,7 @@ import { GRID_SIZE, Interactions } from './interactions';
 import { OverlayLayer } from './Overlay';
 import { ConnectorNode, ObjectNode } from './shapes';
 import { ensureFonts, useFontEpoch } from './text';
-import { CellEditor, TextEditor } from './TextEditor';
+import { CellEditor, LineLabelEditor, TextEditor } from './TextEditor';
 
 const LOW_DETAIL_ZOOM = 0.25;
 
@@ -126,7 +126,7 @@ export function BoardCanvas({ onInteractions }: { onInteractions: (i: Interactio
                   />
                 );
               const r = board.store.resolve(o);
-              return r ? <ConnectorNode key={o.id} o={o} points={r.points} dark={dark} /> : null;
+              return r ? <ConnectorNode key={o.id} o={o} points={r.points} mid={r.mid} dark={dark} /> : null;
             })}
           </Layer>
           <OverlayLayer stage={stage} />
@@ -134,6 +134,7 @@ export function BoardCanvas({ onInteractions }: { onInteractions: (i: Interactio
       )}
       <TextEditor />
       <CellEditor />
+      <LineLabelEditor />
     </div>
   );
 }

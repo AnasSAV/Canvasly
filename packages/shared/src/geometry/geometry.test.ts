@@ -6,6 +6,9 @@ import {
   nearestSideAnchor,
   resolveConnector,
   type AttachTarget,
+  curvePoints,
+  elbowPoints,
+  polylineMidpoint,
 } from './connectors';
 import { SHAPE_VERTICES, shapeTextBox } from './shapes';
 import { snapRect, snapToGrid } from './snap';
@@ -253,5 +256,113 @@ describe('text fit', () => {
     expect(long).toBeLessThan(short);
     const lines = wrapText('This is a much longer sticky note that needs to wrap a lot', 180, long, measure);
     expect(lines.length * long * 1.25).toBeLessThanOrEqual(180);
+  });
+});
+
+describe('line routes', () => {
+  const a = { x: 0, y: 0 };
+  const b = { x: 200, y: 100 };
+  const right = { x: 1, y: 0 };
+  const left = { x: -1, y: 0 };
+  const down = { x: 0, y: 1 };
+  const up = { x: 0, y: -1 };
+
+  it('elbows run across, turn once in the middle, and bends move that turn', () => {
+    expect(elbowPoints(a, b, right, left)).toEqual([0, 0, 100, 0, 100, 100, 200, 100]);
+    expect(elbowPoints(a, b, right, left, { x: 30, y: 0 })).toEqual([0, 0, 130, 0, 130, 100, 200, 100]);
+    expect(elbowPoints(a, b, down, up)).toEqual([0, 0, 0, 50, 200, 50, 200, 100]);
+  });
+
+  it('elbows need only one corner when the ends face across each other', () => {
+    expect(elbowPoints(a, b, right, up)).toEqual([0, 0, 200, 0, 200, 100]);
+    expect(elbowPoints(a, b, down, left)).toEqual([0, 0, 0, 100, 200, 100]);
+  });
+
+  it('curves leave and arrive along the directions given', () => {
+    const pts = curvePoints(a, b, right, left);
+    expect(pts.slice(0, 2)).toEqual([0, 0]);
+    expect(pts.slice(-2)).toEqual([200, 100]);
+    expect(Math.abs(pts[3]!)).toBeLessThan(Math.abs(pts[2]!) / 2); // starts out flat
+    const n = pts.length;
+    expect(Math.abs(pts[n - 1]! - pts[n - 3]!)).toBeLessThan(Math.abs(pts[n - 2]! - pts[n - 4]!)); // and arrives flat
+  });
+
+  it('a bent curve passes through the point it was pulled to', () => {
+    const through = { x: 50, y: 200 };
+    const pts = curvePoints(a, b, right, left, through);
+    let closest = Infinity;
+    for (let i = 0; i < pts.length; i += 2) {
+      closest = Math.min(closest, Math.hypot(pts[i]! - through.x, pts[i + 1]! - through.y));
+    }
+    expect(closest).toBeLessThan(0.001);
+  });
+
+  it('finds the middle by length, not by point count', () => {
+    expect(polylineMidpoint([0, 0, 100, 0])).toEqual({ x: 50, y: 0 });
+    expect(polylineMidpoint([0, 0, 10, 0, 10, 90])).toEqual({ x: 10, y: 40 });
+    expect(polylineMidpoint([5, 5])).toEqual({ x: 5, y: 5 });
+  });
+
+  it('resolves attached lines out of the side they are anchored to, even when rotated', () => {
+    const shapes: Record<string, AttachTarget> = {
+      s: { x: 0, y: 0, w: 100, h: 100, rotation: 0, outline: 'rect' },
+      e: { x: 300, y: 200, w: 100, h: 100, rotation: 0, outline: 'rect' },
+    };
+    const get = (id: string) => shapes[id];
+    const r = resolveConnector(
+      {
+        start: { kind: 'attached', objectId: 's', anchor: [1, 0.5] },
+        end: { kind: 'attached', objectId: 'e', anchor: [0, 0.5] },
+        routing: 'elbow',
+      },
+      get,
+    )!;
+    expect(r.points).toEqual([100, 50, 200, 50, 200, 250, 300, 250]);
+
+    shapes.s = { ...shapes.s!, rotation: 90 };
+    const rotated = resolveConnector(
+      {
+        start: { kind: 'attached', objectId: 's', anchor: [1, 0.5] },
+        end: { kind: 'point', x: 500, y: 500 },
+        routing: 'curved',
+      },
+      get,
+    )!;
+    // Rotated 90 degrees around its corner, the shape's right side now faces down.
+    expect(rotated.points[3]!).toBeGreaterThan(rotated.points[1]!);
+    expect(Math.abs(rotated.points[2]! - rotated.points[0]!)).toBeLessThan(
+      Math.abs(rotated.points[3]! - rotated.points[1]!),
+    );
+  });
+
+  it('puts the handle on the line where it was pulled to, for every route', () => {
+    const ends = {
+      start: { kind: 'point', x: 0, y: 0 },
+      end: { kind: 'point', x: 200, y: 100 },
+    } as const;
+    const at = (routing: 'straight' | 'curved' | 'elbow', bend: { x: number; y: number } | null) =>
+      resolveConnector({ ...ends, routing, bend }, () => undefined)!.mid;
+    expect(at('straight', null)).toEqual({ x: 100, y: 50 });
+    expect(at('straight', { x: 10, y: -80 })).toEqual({ x: 110, y: -30 });
+    expect(at('curved', { x: 10, y: -80 })).toEqual({ x: 110, y: -30 });
+    // A bend moves an elbow's middle segment sideways, and the handle stays in the middle of that segment.
+    expect(at('elbow', null)).toEqual({ x: 100, y: 50 });
+    expect(at('elbow', { x: 30, y: 999 })).toEqual({ x: 130, y: 50 });
+  });
+
+  it('keeps a bend relative, so that it follows when the ends move', () => {
+    const bend = { x: 0, y: 40 };
+    const line = (x: number) =>
+      resolveConnector(
+        {
+          start: { kind: 'point', x, y: 0 },
+          end: { kind: 'point', x: x + 100, y: 0 },
+          routing: 'straight',
+          bend,
+        },
+        () => undefined,
+      )!.points;
+    expect(line(0)).toEqual([0, 0, 50, 40, 100, 0]);
+    expect(line(500)).toEqual([500, 0, 550, 40, 600, 0]);
   });
 });

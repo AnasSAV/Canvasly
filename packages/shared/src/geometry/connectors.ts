@@ -104,24 +104,109 @@ function resolveEnd(end: ConnectorEnd, other: Vec, get: GetAttachTarget): Vec | 
 export interface ResolvedConnector {
   start: Vec;
   end: Vec;
-  /** Flat polyline points including start and end. */
+  /** Flat polyline points including start and end. Curves are sampled, so that everything can treat them alike. */
   points: number[];
+  /** Where the middle handle and the label go: wherever the line has been pulled to. */
+  mid: Vec;
 }
 
-export function elbowPoints(a: Vec, b: Vec): number[] {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  if (Math.abs(dx) >= Math.abs(dy)) {
-    const mx = a.x + dx / 2;
+const axisOf = (d: Vec): Vec =>
+  Math.abs(d.x) >= Math.abs(d.y) ? { x: Math.sign(d.x) || 1, y: 0 } : { x: 0, y: Math.sign(d.y) || 1 };
+
+/**
+ * The direction a line leaves an end in: straight out of the side it's anchored to, or for a free end, along whichever
+ * axis faces the other end most.
+ */
+function leaving(end: ConnectorEnd, at: Vec, other: Vec, get: GetAttachTarget): Vec {
+  if (end.kind === 'attached' && end.anchor !== 'auto') {
+    const t = get(end.objectId);
+    if (t) {
+      const out = axisOf({ x: end.anchor[0] - 0.5, y: end.anchor[1] - 0.5 });
+      const rad = (t.rotation * Math.PI) / 180;
+      return {
+        x: out.x * Math.cos(rad) - out.y * Math.sin(rad),
+        y: out.x * Math.sin(rad) + out.y * Math.cos(rad),
+      };
+    }
+  }
+  return axisOf({ x: other.x - at.x, y: other.y - at.y });
+}
+
+const isHorizontal = (d: Vec) => Math.abs(d.x) >= Math.abs(d.y);
+
+/** Right-angled route between two points, leaving and arriving along the given directions when they're known. */
+export function elbowPoints(a: Vec, b: Vec, from?: Vec, to?: Vec, bend?: Vec | null): number[] {
+  const startFlat = from ? isHorizontal(from) : Math.abs(b.x - a.x) >= Math.abs(b.y - a.y);
+  const endFlat = to ? isHorizontal(to) : startFlat;
+  if (startFlat && endFlat) {
+    const mx = (a.x + b.x) / 2 + (bend?.x ?? 0);
     return [a.x, a.y, mx, a.y, mx, b.y, b.x, b.y];
   }
-  const my = a.y + dy / 2;
-  return [a.x, a.y, a.x, my, b.x, my, b.x, b.y];
+  if (!startFlat && !endFlat) {
+    const my = (a.y + b.y) / 2 + (bend?.y ?? 0);
+    return [a.x, a.y, a.x, my, b.x, my, b.x, b.y];
+  }
+  // One bend is enough when the ends face across each other.
+  return startFlat ? [a.x, a.y, b.x, a.y, b.x, b.y] : [a.x, a.y, a.x, b.y, b.x, b.y];
+}
+
+const CURVE_STEPS = 32;
+
+function sampleCubic(out: number[], p0: Vec, p1: Vec, p2: Vec, p3: Vec) {
+  for (let i = 1; i <= CURVE_STEPS; i++) {
+    const t = i / CURVE_STEPS;
+    const u = 1 - t;
+    const w0 = u * u * u;
+    const w1 = 3 * u * u * t;
+    const w2 = 3 * u * t * t;
+    const w3 = t * t * t;
+    out.push(w0 * p0.x + w1 * p1.x + w2 * p2.x + w3 * p3.x, w0 * p0.y + w1 * p1.y + w2 * p2.y + w3 * p3.y);
+  }
+}
+
+/** Smooth route that leaves and arrives along the given directions, through `through` if it's been bent. */
+export function curvePoints(a: Vec, b: Vec, from: Vec, to: Vec, through?: Vec | null): number[] {
+  const out = [a.x, a.y];
+  const out1 = (p: Vec, d: Vec, k: number): Vec => ({ x: p.x + d.x * k, y: p.y + d.y * k });
+  const span = dist(a, b);
+  if (!through) {
+    const k = Math.max(30, span * 0.45);
+    sampleCubic(out, a, out1(a, from, k), out1(b, to, k), b);
+    return out;
+  }
+  // Through the middle in the overall direction of travel, so that the two halves join smoothly.
+  const tangent = span > 0 ? { x: (b.x - a.x) / span, y: (b.y - a.y) / span } : { x: 1, y: 0 };
+  const k = Math.max(20, span * 0.25);
+  sampleCubic(out, a, out1(a, from, k), out1(through, tangent, -k), through);
+  sampleCubic(out, through, out1(through, tangent, k), out1(b, to, k), b);
+  return out;
+}
+
+/** Where a line's middle handle and label go: halfway along its length. */
+export function polylineMidpoint(points: readonly number[]): Vec {
+  let total = 0;
+  for (let i = 0; i + 3 < points.length; i += 2) {
+    total += Math.hypot(points[i + 2]! - points[i]!, points[i + 3]! - points[i + 1]!);
+  }
+  let left = total / 2;
+  for (let i = 0; i + 3 < points.length; i += 2) {
+    const ax = points[i]!;
+    const ay = points[i + 1]!;
+    const bx = points[i + 2]!;
+    const by = points[i + 3]!;
+    const len = Math.hypot(bx - ax, by - ay);
+    if (left <= len) {
+      const t = len ? left / len : 0;
+      return { x: ax + (bx - ax) * t, y: ay + (by - ay) * t };
+    }
+    left -= len;
+  }
+  return { x: points[0] ?? 0, y: points[1] ?? 0 };
 }
 
 /** World-space geometry of a connector; null if an attached object is missing. */
 export function resolveConnector(
-  c: Pick<ConnectorObject, 'start' | 'end' | 'routing'>,
+  c: Pick<ConnectorObject, 'start' | 'end' | 'routing'> & { bend?: Vec | null },
   get: GetAttachTarget,
 ): ResolvedConnector | null {
   const refStart = referencePoint(c.start, get);
@@ -130,8 +215,30 @@ export function resolveConnector(
   const start = resolveEnd(c.start, refEnd, get);
   const end = resolveEnd(c.end, refStart, get);
   if (!start || !end) return null;
-  const points = c.routing === 'elbow' ? elbowPoints(start, end) : [start.x, start.y, end.x, end.y];
-  return { start, end, points };
+  const bend = c.bend ?? null;
+  const through = bend && {
+    x: (start.x + end.x) / 2 + bend.x,
+    y: (start.y + end.y) / 2 + bend.y,
+  };
+  if (c.routing === 'straight') {
+    const points = through
+      ? [start.x, start.y, through.x, through.y, end.x, end.y]
+      : [start.x, start.y, end.x, end.y];
+    return { start, end, points, mid: through ?? polylineMidpoint(points) };
+  }
+  const from = leaving(c.start, start, end, get);
+  const to = leaving(c.end, end, start, get);
+  if (c.routing === 'elbow') {
+    const points = elbowPoints(start, end, from, to, bend);
+    // Middle of the segment a bend moves, when there is one.
+    const mid =
+      points.length === 8
+        ? { x: (points[2]! + points[4]!) / 2, y: (points[3]! + points[5]!) / 2 }
+        : polylineMidpoint(points);
+    return { start, end, points, mid };
+  }
+  const points = curvePoints(start, end, from, to, through);
+  return { start, end, points, mid: through ?? polylineMidpoint(points) };
 }
 
 export function polylineBounds(points: readonly number[]): Rect {

@@ -126,6 +126,9 @@ touch support.
   positions, styles, rotation and shapes. It holds no image files and names fonts only by opaque id, so
   pictures become placeholders, and only fonts mapped in
   [`canvaImport.ts`](apps/web/src/doc/canvaImport.ts) carry over.
+- **Lines:** straight, elbowed or curved, leaving and arriving straight out of the sides they're attached to;
+  a choice of ends, solid/dashed/dotted, thickness, and a label. The middle handle bends a line, and
+  double-clicking it straightens the line again. Bends are stored relative to the ends, so they follow them.
 - **Drawing:** pen and highlighter with three remembered presets and any custom color; smart drawing, which
   turns a sketch into a line, rectangle, ellipse, triangle or diamond with local rules
   ([`strokes.ts`](packages/shared/src/geometry/strokes.ts)) and leaves anything else as ink; an eraser that

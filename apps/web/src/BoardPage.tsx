@@ -274,6 +274,7 @@ function BoardView({
       selectedIds: [],
       editingId: null,
       editingCell: null,
+      editingLabelId: null,
       activeCell: null,
       contextMenu: null,
       chartEditorId: null,

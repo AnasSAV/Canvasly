@@ -53,6 +53,8 @@ interface UIState {
   selectedIds: string[];
   editingId: string | null;
   editingCell: { id: string; rowId: string; colId: string } | null;
+  /** Line whose label is being typed. */
+  editingLabelId: string | null;
   /** Last cell used in each table, so row/column actions know where to apply. */
   activeCell: { id: string; rowId: string; colId: string } | null;
   contextMenu: ContextMenuState | null;
@@ -101,6 +103,7 @@ interface UIState {
   setPanning: (v: boolean) => void;
   setAttachHover: (id: string | null) => void;
   setEditingCell: (c: UIState['editingCell']) => void;
+  setEditingLabel: (id: string | null) => void;
   setContextMenu: (m: ContextMenuState | null) => void;
   setChartEditor: (id: string | null) => void;
   setShortcutsOpen: (v: boolean) => void;
@@ -130,6 +133,7 @@ export const useUI = create<UIState>()((set, get) => ({
   selectedIds: [],
   editingId: null,
   editingCell: null,
+  editingLabelId: null,
   activeCell: null,
   contextMenu: null,
   chartEditorId: null,
@@ -157,7 +161,7 @@ export const useUI = create<UIState>()((set, get) => ({
   importProgress: null,
   documentPages: {},
 
-  setTool: (tool) => set({ tool, editingId: null, editingCell: null, draft: null }),
+  setTool: (tool) => set({ tool, editingId: null, editingCell: null, editingLabelId: null, draft: null }),
   select: (ids) => {
     if (!sameIds(get().selectedIds, ids)) set({ selectedIds: ids });
   },
@@ -170,6 +174,7 @@ export const useUI = create<UIState>()((set, get) => ({
   },
   setEditingCell: (editingCell) =>
     set(editingCell ? { editingCell, activeCell: editingCell } : { editingCell }),
+  setEditingLabel: (editingLabelId) => set({ editingLabelId }),
   setContextMenu: (contextMenu) => set({ contextMenu }),
   setChartEditor: (chartEditorId) => set({ chartEditorId }),
   setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),

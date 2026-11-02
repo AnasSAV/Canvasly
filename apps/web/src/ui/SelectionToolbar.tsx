@@ -1,4 +1,7 @@
 import {
+  LINE_CAPS,
+  LINE_DASHES,
+  LINE_ROUTINGS,
   STICKY_COLORS,
   STROKE_COLORS,
   hasText,
@@ -11,6 +14,9 @@ import {
   type ConnectorObject,
   type DocumentObject,
   type FontId,
+  type LineCap,
+  type LineDash,
+  type LineRouting,
   type ListKind,
   type ObjectPatch,
   type TextBearingObject,
@@ -39,10 +45,13 @@ import {
   Lock,
   LockOpen,
   MessageCircleMore,
-  MoveUpRight,
+  Minus,
+  RefreshCw,
   Rows2,
   Shapes,
+  Spline,
   Strikethrough,
+  Type,
   Underline,
   Ungroup,
 } from 'lucide-react';
@@ -467,6 +476,185 @@ function MoreMenu({ actions, title }: { actions: Actions; title: string }) {
   );
 }
 
+const CAP_LABELS: Record<LineCap, string> = {
+  none: 'None',
+  arrow: 'Arrow',
+  open: 'Open arrow',
+  circle: 'Dot',
+  diamond: 'Diamond',
+  bar: 'Bar',
+};
+
+const ROUTING_LABELS: Record<LineRouting, string> = {
+  straight: 'Straight line',
+  elbow: 'Elbowed line',
+  curved: 'Curved line',
+};
+
+function RoutingIcon({ routing }: { routing: LineRouting }) {
+  if (routing === 'elbow') return <CornerDownRight size={17} />;
+  if (routing === 'curved') return <Spline size={17} />;
+  return <Minus size={17} className="-rotate-45" />;
+}
+
+/** A line end as it looks, drawn pointing right; the start of a line flips it to point left. */
+function CapGlyph({ cap, flip }: { cap: LineCap; flip?: boolean }) {
+  return (
+    <svg
+      width="26"
+      height="14"
+      viewBox="0 0 26 14"
+      fill="currentColor"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={flip ? { transform: 'scaleX(-1)' } : undefined}
+      aria-hidden
+    >
+      <path d="M2 7H22" fill="none" />
+      {cap === 'arrow' && <path d="M24 7L16 2.5V11.5Z" />}
+      {cap === 'open' && <path d="M17 2.5L24 7L17 11.5" fill="none" />}
+      {cap === 'circle' && <circle cx="20.5" cy="7" r="3.5" />}
+      {cap === 'diamond' && <path d="M24 7L19.5 3L15 7L19.5 11Z" />}
+      {cap === 'bar' && <path d="M23 2.5V11.5" fill="none" />}
+    </svg>
+  );
+}
+
+function CapMenu({
+  which,
+  value,
+  onPick,
+}: {
+  which: 'start' | 'end';
+  value: LineCap;
+  onPick: (cap: LineCap) => void;
+}) {
+  const { isOpen, toggle, close } = useDropdown(`cap-${which}`);
+  const flip = which === 'start';
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        title={which === 'start' ? 'Start of line' : 'End of line'}
+        aria-expanded={isOpen}
+        onClick={toggle}
+        className={`flex h-10 min-w-10 items-center justify-center rounded-lg px-1.5 text-sm hover:bg-gray-100 dark:hover:bg-zinc-800 ${
+          isOpen ? 'bg-indigo-100 dark:bg-indigo-500/20' : ''
+        }`}
+        data-testid={`line-${which}-cap`}
+      >
+        {value === 'none' ? 'None' : <CapGlyph cap={value} flip={flip} />}
+      </button>
+      {isOpen && (
+        <Dropdown className={`${panel} left-1/2 flex w-40 -translate-x-1/2 flex-col p-1`}>
+          {LINE_CAPS.map((cap) => (
+            <button
+              key={cap}
+              type="button"
+              onClick={() => {
+                onPick(cap);
+                close();
+              }}
+              className={`flex items-center justify-between rounded-md px-2 py-1.5 text-sm whitespace-nowrap hover:bg-gray-100 dark:hover:bg-zinc-800 ${
+                cap === value ? 'text-indigo-600 dark:text-indigo-400' : ''
+              }`}
+              data-testid={`cap-${cap}`}
+            >
+              {CAP_LABELS[cap]}
+              {cap !== 'none' && <CapGlyph cap={cap} flip={flip} />}
+            </button>
+          ))}
+        </Dropdown>
+      )}
+    </div>
+  );
+}
+
+function LineStyleMenu({
+  dash,
+  width,
+  onDash,
+  onWidth,
+}: {
+  dash: LineDash;
+  width: number;
+  onDash: (dash: LineDash) => void;
+  onWidth: (width: number) => void;
+}) {
+  const { isOpen, toggle } = useDropdown('line-style');
+  return (
+    <div className="relative">
+      <IconButton label="Line style" active={isOpen} onClick={toggle} data-testid="line-style">
+        <svg
+          width="20"
+          height="16"
+          viewBox="0 0 20 16"
+          stroke="currentColor"
+          strokeLinecap="round"
+          aria-hidden
+        >
+          <path d="M2 3H18" strokeWidth="1.5" />
+          <path d="M2 8H18" strokeWidth="2.5" strokeDasharray="4 3.5" />
+          <path d="M2 13H18" strokeWidth="2.5" strokeDasharray="0.1 4" />
+        </svg>
+      </IconButton>
+      {isOpen && (
+        <Dropdown className={`${panel} left-1/2 w-44 -translate-x-1/2 p-2.5`}>
+          <div className="mb-2.5 flex gap-1">
+            {LINE_DASHES.map((d) => (
+              <button
+                key={d}
+                type="button"
+                title={d[0]!.toUpperCase() + d.slice(1)}
+                aria-label={d}
+                aria-pressed={d === dash}
+                onClick={() => onDash(d)}
+                className={`flex h-8 flex-1 items-center justify-center rounded-md ${
+                  d === dash
+                    ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300'
+                    : 'hover:bg-gray-100 dark:hover:bg-zinc-800'
+                }`}
+                data-testid={`dash-${d}`}
+              >
+                <svg
+                  width="28"
+                  height="4"
+                  viewBox="0 0 28 4"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  aria-hidden
+                >
+                  <path
+                    d="M2 2H26"
+                    strokeWidth="2.5"
+                    strokeDasharray={d === 'dashed' ? '6 5' : d === 'dotted' ? '0.1 5' : undefined}
+                  />
+                </svg>
+              </button>
+            ))}
+          </div>
+          <label className="text-xs font-medium text-gray-500 dark:text-zinc-400">
+            Thickness: {width}
+            <input
+              type="range"
+              min={1}
+              max={20}
+              defaultValue={width}
+              // Dragging the slider is one change, applied when it's let go.
+              onPointerUp={(e) => onWidth(Number(e.currentTarget.value))}
+              onKeyUp={(e) => onWidth(Number(e.currentTarget.value))}
+              className="mt-1 block w-full accent-indigo-600"
+              data-testid="line-width"
+            />
+          </label>
+        </Dropdown>
+      )}
+    </div>
+  );
+}
+
 /** Page turning, for viewers too, plus putting the pages on the board and getting the PDF back. */
 function DocumentControls({ o }: { o: DocumentObject }) {
   const board = useBoard();
@@ -860,9 +1048,50 @@ function StyleControls({ objs, ids }: { objs: BoardObject[]; ids: string[] }) {
     );
   }
   if (only('connector') && first?.type === 'connector') {
-    const conn = (fn: (c: ConnectorObject) => Partial<ConnectorObject>) =>
+    const conn = (fn: (c: ConnectorObject) => ObjectPatch) =>
       updateEach(board, ids, (o) => (o.type === 'connector' ? fn(o) : null));
     controls.push(
+      <CapMenu
+        key="start"
+        which="start"
+        value={first.startCap}
+        onPick={(startCap) => conn(() => ({ startCap }))}
+      />,
+      <IconButton
+        key="swap"
+        label="Swap line ends"
+        onClick={() => conn((c) => ({ startCap: c.endCap, endCap: c.startCap }))}
+        data-testid="line-swap"
+      >
+        <RefreshCw size={18} />
+      </IconButton>,
+      <CapMenu key="end" which="end" value={first.endCap} onPick={(endCap) => conn(() => ({ endCap }))} />,
+      <Divider key="divider-caps" />,
+      <ToggleMenu
+        key="type"
+        id="line-type"
+        label="Line type"
+        icon={
+          <span className="flex flex-col items-center leading-none">
+            <RoutingIcon routing={first.routing} />
+            <span className="mt-0.5 text-[9px]">Type</span>
+          </span>
+        }
+        testId="line-type"
+      >
+        {LINE_ROUTINGS.map((routing) => (
+          <IconButton
+            key={routing}
+            label={ROUTING_LABELS[routing]}
+            active={first.routing === routing}
+            // A bend is only meaningful along the route it was made on.
+            onClick={() => conn(() => ({ routing, bend: null }))}
+            data-testid={`route-${routing}`}
+          >
+            <RoutingIcon routing={routing} />
+          </IconButton>
+        ))}
+      </ToggleMenu>,
       <ColorPicker
         key="line"
         label="Line color"
@@ -870,29 +1099,23 @@ function StyleControls({ objs, ids }: { objs: BoardObject[]; ids: string[] }) {
         colors={STROKE_COLORS}
         onPick={(stroke) => conn(() => ({ stroke }))}
       />,
+      <LineStyleMenu
+        key="style"
+        dash={first.dash}
+        width={first.strokeWidth}
+        onDash={(dash) => conn(() => ({ dash }))}
+        onWidth={(strokeWidth) => conn(() => ({ strokeWidth }))}
+      />,
+      <Divider key="divider-style" />,
       <IconButton
-        key="startcap"
-        label="Arrow at start"
-        active={first.startCap === 'arrow'}
-        onClick={() => conn((c) => ({ startCap: c.startCap === 'arrow' ? 'none' : 'arrow' }))}
+        key="label"
+        label="Add text to line"
+        active={!!first.label}
+        disabled={objs.length > 1}
+        onClick={() => useUI.getState().setEditingLabel(first.id)}
+        data-testid="line-label"
       >
-        <MoveUpRight size={16} className="rotate-180" />
-      </IconButton>,
-      <IconButton
-        key="endcap"
-        label="Arrow at end"
-        active={first.endCap === 'arrow'}
-        onClick={() => conn((c) => ({ endCap: c.endCap === 'arrow' ? 'none' : 'arrow' }))}
-      >
-        <MoveUpRight size={16} />
-      </IconButton>,
-      <IconButton
-        key="routing"
-        label="Elbow routing"
-        active={first.routing === 'elbow'}
-        onClick={() => conn((c) => ({ routing: c.routing === 'elbow' ? 'straight' : 'elbow' }))}
-      >
-        <CornerDownRight size={16} />
+        <Type size={18} />
       </IconButton>,
     );
   }
@@ -1046,11 +1269,13 @@ export function SelectionToolbar({ actions, title }: { actions: Actions; title: 
   const interacting = useUI((s) => s.interacting);
   const editingId = useUI((s) => s.editingId);
   const editingCell = useUI((s) => s.editingCell);
+  const editingLabel = useUI((s) => s.editingLabelId);
   const readOnly = useUI((s) => s.readOnly);
   const objs = selectedIds.map((id) => board.store.get(id)).filter((o) => o !== undefined);
   // Viewers only get a toolbar for turning the pages of a document.
   const viewerUse = objs.length === 1 && objs[0]?.type === 'pdf';
-  if (!objs.length || interacting || editingId || editingCell || (readOnly && !viewerUse)) return null;
+  const editing = editingId || editingCell || editingLabel;
+  if (!objs.length || interacting || editing || (readOnly && !viewerUse)) return null;
   return (
     <ToolbarBody key={selectedIds.join()} objs={objs} ids={selectedIds} actions={actions} title={title} />
   );

@@ -117,6 +117,9 @@ export function makeConnector(
     strokeWidth: 2,
     startCap: 'none',
     endCap: opts.arrow ? 'arrow' : 'none',
+    dash: 'solid',
+    bend: null,
+    label: '',
   };
 }
 

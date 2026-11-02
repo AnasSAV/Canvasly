@@ -59,6 +59,7 @@ const SNAP_DISTANCE = 6; // screen px
 const STROKE_ERASER_RADIUS = 8; // screen px
 const SPOT_ERASER_RADIUS = 12; // screen px
 const SMART_MIN_SIZE = 24; // screen px; anything smaller stays as ink
+const BEND_SNAP = 8; // screen px; a line dragged back to about straight goes properly straight
 
 type Gesture =
   /** `rightClick`: started with the right button; releasing without moving opens the context menu. */
@@ -81,6 +82,7 @@ type Gesture =
   | { kind: 'lasso'; points: number[] }
   | { kind: 'connector'; start: ConnectorEnd; startScreen: Vec; arrow: boolean }
   | { kind: 'reattach'; id: string; which: 'start' | 'end'; started: boolean; startScreen: Vec }
+  | { kind: 'bend'; id: string; started: boolean; startScreen: Vec }
   | { kind: 'eraser'; spot: boolean; last: Vec }
   | { kind: 'pinch'; startDist: number; startMid: Vec; startCam: Camera };
 
@@ -203,7 +205,10 @@ export class Interactions {
     this.pending = null;
     if (!g) return;
     const u = ui();
-    if ((g.kind === 'move' && g.started) || g.kind === 'eraser' || g.kind === 'pen') this.board.endGesture();
+    if (((g.kind === 'move' || g.kind === 'bend') && g.started) || g.kind === 'eraser' || g.kind === 'pen') {
+      this.board.endGesture();
+    }
+    if (g.kind === 'bend') u.setInteracting(false);
     if (g.kind === 'move') {
       u.setInteracting(false);
       u.setGuides([]);
@@ -237,6 +242,9 @@ export class Interactions {
     } else if (hit.type === 'chart') {
       u.select([hit.id]);
       u.setChartEditor(hit.id);
+    } else if (hit.type === 'connector') {
+      u.select([hit.id]);
+      u.setEditingLabel(hit.id);
     }
   }
 
@@ -277,6 +285,7 @@ export class Interactions {
     this.lastWorld = p;
     if (u.editingId) u.setEditing(null);
     if (u.editingCell) u.setEditingCell(null);
+    if (u.editingLabelId) u.setEditingLabel(null);
 
     // Overlay widgets drawn by Konva take precedence.
     const node = this.getStage()?.getIntersection(screen);
@@ -284,6 +293,12 @@ export class Interactions {
       const handle = node.getAttr('connectorHandle') as { id: string; which: 'start' | 'end' } | undefined;
       if (handle && e.button === 0 && !this.board.readOnly) {
         this.g = { kind: 'reattach', ...handle, started: false, startScreen: screen };
+        this.el.setPointerCapture(e.pointerId);
+        return;
+      }
+      const mid = node.getAttr('connectorMid') as string | undefined;
+      if (mid && e.button === 0 && !this.board.readOnly) {
+        this.g = { kind: 'bend', id: mid, started: false, startScreen: screen };
         this.el.setPointerCapture(e.pointerId);
         return;
       }
@@ -572,6 +587,24 @@ export class Interactions {
         this.schedule(() => patch(this.board, id, { [which]: end }));
         break;
       }
+      case 'bend': {
+        const c = this.board.store.get(g.id);
+        if (c?.type !== 'connector') return;
+        if (!g.started) {
+          if (dist(screen, g.startScreen) < DRAG_THRESHOLD) return;
+          g.started = true;
+          this.board.beginGesture();
+          u.setInteracting(true);
+        }
+        const r = this.board.store.resolve({ ...c, bend: null });
+        if (!r) return;
+        const x = p.x - (r.start.x + r.end.x) / 2;
+        const y = p.y - (r.start.y + r.end.y) / 2;
+        const bend = Math.hypot(x, y) * zoom < BEND_SNAP ? null : { x, y };
+        const { id } = g;
+        this.schedule(() => patch(this.board, id, { bend }));
+        break;
+      }
       case 'eraser': {
         u.setDraft({ kind: 'eraser', x: p.x, y: p.y, r: eraserRadius(g.spot) });
         this.eraseAlong(g.last, p, g.spot);
@@ -696,6 +729,12 @@ export class Interactions {
           u.setInteracting(false);
         }
         break;
+      case 'bend':
+        if (g.started) {
+          this.board.endGesture();
+          u.setInteracting(false);
+        }
+        break;
       case 'eraser':
         this.board.endGesture();
         break;
@@ -788,6 +827,13 @@ export class Interactions {
 
   onDoubleClick = (e: MouseEvent) => {
     if (isEditableTarget(e)) return;
+    // Double-clicking a line's middle handle straightens it again.
+    const mid = this.getStage()?.getIntersection(this.screen(e))?.getAttr('connectorMid') as
+      string | undefined;
+    if (mid) {
+      if (!this.board.readOnly) patch(this.board, mid, { bend: null });
+      return;
+    }
     this.editAt(this.world(e));
   };
 

@@ -206,15 +206,29 @@ export const ConnectorEnd = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('attached'), objectId: z.string(), anchor: Anchor }),
 ]);
 
+export const LINE_CAPS = ['none', 'arrow', 'open', 'circle', 'diamond', 'bar'] as const;
+export type LineCap = (typeof LINE_CAPS)[number];
+export const LINE_ROUTINGS = ['straight', 'elbow', 'curved'] as const;
+export type LineRouting = (typeof LINE_ROUTINGS)[number];
+export const LINE_DASHES = ['solid', 'dashed', 'dotted'] as const;
+export type LineDash = (typeof LINE_DASHES)[number];
+
+/** A cap this client doesn't know yet is still a line, just without that end. */
+const Cap = z.enum(LINE_CAPS).default('none').catch('none');
+
 export const ConnectorObject = Base.extend({
   type: z.literal('connector'),
   start: ConnectorEnd,
   end: ConnectorEnd,
-  routing: z.enum(['straight', 'elbow']).default('straight'),
+  routing: z.enum(LINE_ROUTINGS).default('straight').catch('straight'),
   stroke: Color,
   strokeWidth: z.number().positive(),
-  startCap: z.enum(['none', 'arrow']).default('none'),
-  endCap: z.enum(['none', 'arrow']).default('none'),
+  startCap: Cap,
+  endCap: Cap,
+  dash: z.enum(LINE_DASHES).default('solid').catch('solid'),
+  /** How far the line's middle is pulled from halfway between its ends, so that it follows them when they move. */
+  bend: z.object({ x: z.number(), y: z.number() }).nullable().default(null),
+  label: z.string().max(500).default(''),
 });
 
 export const BoardObject = z.discriminatedUnion('type', [

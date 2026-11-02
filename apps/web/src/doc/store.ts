@@ -102,8 +102,9 @@ export class DocStore {
     return { x: o.x, y: o.y, w: o.w, h: o.h, rotation: o.rotation, outline: o.type };
   };
 
-  resolve = (c: Pick<ConnectorObject, 'start' | 'end' | 'routing'>): ResolvedConnector | null =>
-    resolveConnector(c, this.getAttachTarget);
+  resolve = (
+    c: Pick<ConnectorObject, 'start' | 'end' | 'routing'> & { bend?: ConnectorObject['bend'] },
+  ): ResolvedConnector | null => resolveConnector(c, this.getAttachTarget);
 
   connectorsAttachedTo(id: string): ReadonlySet<string> {
     return this.dependents.get(id) ?? new Set();
