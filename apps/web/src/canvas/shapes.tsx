@@ -22,7 +22,18 @@ import { useViewport } from '../state/viewport';
 import { canvasColors, ink, paper } from './colors';
 import { freehandPath } from './freehand';
 import { traceShape } from './shapePaths';
-import { FONTS, FONT_FAMILY, LINE_HEIGHT, SHAPE_PADDING, STICKY_PADDING, autoFontSize } from './text';
+import {
+  FONTS,
+  FONT_FAMILY,
+  LINE_HEIGHT,
+  SHAPE_PADDING,
+  STICKY_PADDING,
+  TEXT_BACKGROUND_PADDING,
+  autoFontSize,
+  fontStyle,
+  textDecoration,
+  textLineRects,
+} from './text';
 import { drawChart, drawTable } from './widgets';
 
 /** Konva's context wrapper around the native 2D context, for drawing code shared with exports. */
@@ -42,7 +53,7 @@ interface DetailProps {
 
 const Sticky = ({ o, editing, lowDetail }: { o: StickyObject } & DetailProps) => {
   const showText = !editing && !lowDetail && o.text;
-  const fontSize = showText ? autoFontSize(o.text, o.w, o.h, STICKY_PADDING, o.font) : 0;
+  const fontSize = showText ? autoFontSize(o.text, o.w, o.h, STICKY_PADDING, o) : 0;
   return (
     <Group {...boxGroupProps(o)}>
       {!lowDetail && (
@@ -66,9 +77,11 @@ const Sticky = ({ o, editing, lowDetail }: { o: StickyObject } & DetailProps) =>
           text={o.text}
           fontSize={fontSize}
           fontFamily={FONTS[o.font].family}
+          fontStyle={fontStyle(o)}
+          textDecoration={textDecoration(o)}
           lineHeight={LINE_HEIGHT}
           fill="#1a1a1a"
-          align="center"
+          align={o.align}
           verticalAlign="middle"
           wrap="word"
           perfectDrawEnabled={false}
@@ -82,12 +95,41 @@ const TextNode = ({ o, editing, dark }: { o: TextObject } & DetailProps) => (
   <Group {...boxGroupProps(o)}>
     {/* Invisible box keeps the group's client rect stable for the Transformer. */}
     <Rect width={o.w} height={o.h} fill="transparent" />
+    {o.background !== 'transparent' && (
+      <Rect
+        x={-TEXT_BACKGROUND_PADDING}
+        y={-TEXT_BACKGROUND_PADDING}
+        width={o.w + TEXT_BACKGROUND_PADDING * 2}
+        height={o.h + TEXT_BACKGROUND_PADDING * 2}
+        cornerRadius={3}
+        fill={o.background}
+        perfectDrawEnabled={false}
+      />
+    )}
+    {!editing &&
+      o.highlight !== 'transparent' &&
+      textLineRects(o).map(
+        (r, i) =>
+          !r.empty && (
+            <Rect
+              key={i}
+              x={r.x}
+              y={r.y}
+              width={r.w}
+              height={r.h}
+              fill={o.highlight}
+              perfectDrawEnabled={false}
+            />
+          ),
+      )}
     {!editing && (
       <Text
         {...(o.autoWidth ? { wrap: 'none' } : { width: o.w, wrap: 'word' })}
         text={o.text}
         fontSize={o.fontSize}
         fontFamily={FONTS[o.font].family}
+        fontStyle={fontStyle(o)}
+        textDecoration={textDecoration(o)}
         lineHeight={LINE_HEIGHT}
         fill={ink(o.color, dark)}
         align={o.align}
@@ -100,7 +142,7 @@ const TextNode = ({ o, editing, dark }: { o: TextObject } & DetailProps) => (
 const Shape = ({ o, editing, lowDetail, dark }: { o: ShapeObject } & DetailProps) => {
   const showText = !editing && !lowDetail && o.text;
   const box = shapeTextBox(o.type, o.w, o.h, SHAPE_PADDING);
-  const fontSize = showText ? Math.min(autoFontSize(o.text, box.w, box.h, 0, o.font), 28) : 0;
+  const fontSize = showText ? Math.min(autoFontSize(o.text, box.w, box.h, 0, o), 28) : 0;
   // Text on a light custom fill stays dark; on the default (or transparent) fill it follows the theme.
   const textColor =
     o.fill === 'transparent' || o.fill.toLowerCase() === '#ffffff' ? ink(o.textColor, dark) : o.textColor;
@@ -129,9 +171,11 @@ const Shape = ({ o, editing, lowDetail, dark }: { o: ShapeObject } & DetailProps
           text={o.text}
           fontSize={fontSize}
           fontFamily={FONTS[o.font].family}
+          fontStyle={fontStyle(o)}
+          textDecoration={textDecoration(o)}
           lineHeight={LINE_HEIGHT}
           fill={textColor}
-          align="center"
+          align={o.align}
           verticalAlign="middle"
           wrap="word"
           perfectDrawEnabled={false}

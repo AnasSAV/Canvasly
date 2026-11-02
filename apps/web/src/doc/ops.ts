@@ -5,8 +5,12 @@ import {
   cloneForPaste,
   getMetaMap,
   insertObject,
+  isShapeObject,
   keyAbove,
   keysAbove,
+  makeShape,
+  makeSticky,
+  makeText,
   newId,
   patchObject,
   prepareCopy,
@@ -18,9 +22,12 @@ import {
   type ConnectorEnd,
   type ObjectPatch,
   type Rect,
+  type ShapeKind,
+  type TextBearingObject,
   type TableObject,
   type Vec,
 } from '@canvasly/shared';
+import { textBox } from '../canvas/text';
 import type { Board } from './board';
 import type { DocStore } from './store';
 
@@ -275,4 +282,28 @@ export function setStartView(board: Board, rect: Rect) {
 export function duplicate(board: Board, ids: string[]): string[] {
   const payload = copyPayload(board, ids);
   return payload ? pastePayload(board, payload, null) : [];
+}
+
+export type ConvertTarget = 'text' | 'sticky' | ShapeKind;
+
+/** Turn a text-bearing object into another kind, keeping its id so that connectors stay attached. */
+export function convertObject(board: Board, o: TextBearingObject, target: ConvertTarget) {
+  const { id, z, locked, groupId, x, y, rotation, text, font, bold, italic, underline, strike, link } = o;
+  const kept = { id, z, locked, groupId, x, y, rotation, text, font, bold, italic, underline, strike, link };
+  const ink = o.type === 'text' ? o.color : isShapeObject(o) ? o.textColor : '#1a1a1a';
+  let next: BoardObject;
+  if (target === 'text') {
+    const t = { ...makeText({ x, y }, z, ink), ...kept };
+    next = { ...t, ...textBox(t) };
+  } else if (target === 'sticky') {
+    next = { ...makeSticky({ x, y }, z), ...kept };
+  } else {
+    // Bare text needs room to become a shape; a sticky or shape keeps its size and any shape keeps its style.
+    const size =
+      o.type === 'text' ? { w: Math.max(o.w + 40, 160), h: Math.max(o.h + 40, 100) } : { w: o.w, h: o.h };
+    const shape = makeShape(target, { x, y, ...size }, z);
+    const style = isShapeObject(o) ? { fill: o.fill, stroke: o.stroke, strokeWidth: o.strokeWidth } : {};
+    next = { ...shape, ...style, ...kept, textColor: ink };
+  }
+  board.transact(() => insertObject(board.objects, next), true);
 }

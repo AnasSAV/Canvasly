@@ -124,7 +124,7 @@ function SelectionTransformer({ stage }: { stage: Konva.Stage | null }) {
           const sideDrag = anchorRef.current === 'middle-left' || anchorRef.current === 'middle-right';
           const fontSize = sideDrag ? o.fontSize : Math.min(400, Math.max(4, Math.round(o.fontSize * sy)));
           const autoWidth = o.autoWidth && !sideDrag;
-          const box = textBox({ text: o.text, w: p.w!, fontSize, font: o.font, autoWidth });
+          const box = textBox({ ...o, w: p.w!, fontSize, autoWidth });
           p.fontSize = fontSize;
           p.autoWidth = autoWidth;
           p.w = round(box.w);
@@ -324,6 +324,18 @@ function Draft({ zoom }: { zoom: number }) {
         />
       );
     }
+    case 'lasso':
+      return (
+        <Line
+          points={draft.points}
+          closed
+          stroke={ACCENT}
+          strokeWidth={1.5 / zoom}
+          dash={[6 / zoom, 4 / zoom]}
+          fill="rgba(66,98,255,0.08)"
+          listening={false}
+        />
+      );
     case 'eraser':
       return (
         <Circle

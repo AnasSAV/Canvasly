@@ -1,5 +1,6 @@
 import {
   cellKey,
+  continueList,
   hasText,
   localToWorld,
   patchObject,
@@ -22,7 +23,9 @@ import {
   SHAPE_PADDING,
   STICKY_PADDING,
   autoFontSize,
+  fontStyle,
   textBox,
+  textDecoration,
   useFontEpoch,
 } from './text';
 import { cellPadding, cellRect } from './widgets';
@@ -38,8 +41,8 @@ function layout(o: TextBearingObject, dark: boolean) {
           w: o.w - STICKY_PADDING * 2,
           h: o.h - STICKY_PADDING * 2,
         },
-        fontSize: autoFontSize(o.text, o.w, o.h, STICKY_PADDING, o.font),
-        align: 'center',
+        fontSize: autoFontSize(o.text, o.w, o.h, STICKY_PADDING, o),
+        align: o.align,
         color: '#1a1a1a',
         center: true,
       };
@@ -55,8 +58,8 @@ function layout(o: TextBearingObject, dark: boolean) {
       const box = shapeTextBox(o.type, o.w, o.h, SHAPE_PADDING);
       return {
         box,
-        fontSize: Math.min(autoFontSize(o.text, box.w, box.h, 0, o.font), 28),
-        align: 'center',
+        fontSize: Math.min(autoFontSize(o.text, box.w, box.h, 0, o), 28),
+        align: o.align,
         color:
           o.fill === 'transparent' || o.fill.toLowerCase() === '#ffffff'
             ? ink(o.textColor, dark)
@@ -79,6 +82,8 @@ export function TextEditor() {
   const dark = useTheme((s) => s.dark);
   useFontEpoch((s) => s.epoch); // refit once this object's font has loaded
   const ref = useRef<HTMLTextAreaElement>(null);
+  /** Where to put the caret after a list keystroke rewrites the text. */
+  const caretAfter = useRef<number | null>(null);
   const obj = editingId ? board.store.get(editingId) : undefined;
   const o = obj && hasText(obj) ? obj : null;
 
@@ -95,6 +100,10 @@ export function TextEditor() {
     if (!el || !o) return;
     el.style.height = '0px';
     el.style.height = `${el.scrollHeight}px`;
+    if (caretAfter.current !== null) {
+      el.setSelectionRange(caretAfter.current, caretAfter.current);
+      caretAfter.current = null;
+    }
     if (o.type === 'text') {
       const h = Math.max(o.fontSize * LINE_HEIGHT, el.scrollHeight / camera.zoom);
       const next = o.autoWidth ? textBox(o) : { w: o.w, h };
@@ -109,6 +118,8 @@ export function TextEditor() {
   const pos = worldToScreen(camera, { x: o.x, y: o.y });
   const z = camera.zoom;
   const hugging = o.type === 'text' && o.autoWidth;
+  // Room past the end of the text, so the caret isn't clipped before the box catches up.
+  const slack = hugging ? fontSize : 0;
 
   const finish = () => {
     const ui = useUI.getState();
@@ -125,8 +136,7 @@ export function TextEditor() {
       style={{
         left: pos.x,
         top: pos.y,
-        // Room past the end of the text, so the caret isn't clipped before the box catches up.
-        width: (o.w + (hugging ? fontSize : 0)) * z,
+        width: (o.w + slack) * z,
         height: o.type === 'text' ? undefined : o.h * z,
         paddingLeft: box.x * z,
         paddingTop: box.y * z,
@@ -148,15 +158,27 @@ export function TextEditor() {
           if (e.key === 'Escape' || (e.key === 'Enter' && (e.metaKey || e.ctrlKey))) {
             e.preventDefault();
             finish();
+          } else if (e.key === 'Enter' && !e.shiftKey) {
+            const el = e.currentTarget;
+            const next = el.selectionStart === el.selectionEnd && continueList(el.value, el.selectionStart);
+            if (!next) return;
+            e.preventDefault();
+            caretAfter.current = next.caret;
+            board.transact(() => patchObject(board.objects, o.id, { text: next.text }));
           }
         }}
         className="pointer-events-auto block w-full resize-none overflow-hidden border-0 bg-transparent p-0 outline-none"
         style={{
           fontFamily: FONTS[o.font].family,
           fontSize: fontSize * z,
+          fontWeight: o.bold ? 700 : 400,
+          fontStyle: fontStyle({ bold: false, italic: o.italic }),
+          textDecoration: textDecoration(o) || undefined,
           lineHeight: LINE_HEIGHT,
           color,
           whiteSpace: hugging ? 'pre' : undefined,
+          // Keep centered and right-aligned text where it will land, with the extra room split accordingly.
+          marginLeft: (align === 'center' ? -slack / 2 : align === 'right' ? -slack : 0) * z,
           textAlign: align as 'left' | 'center' | 'right',
           maxHeight: o.type === 'text' ? undefined : box.h * z,
           caretColor: '#4262ff',

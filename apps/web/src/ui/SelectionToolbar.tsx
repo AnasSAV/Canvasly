@@ -1,50 +1,79 @@
 import {
-  FONT_IDS,
   STICKY_COLORS,
   STROKE_COLORS,
   hasText,
+  isSafeLink,
   isShapeObject,
+  listKind,
+  toggleList,
   worldToScreen,
   type BoardObject,
   type ConnectorObject,
   type FontId,
+  type ListKind,
+  type ObjectPatch,
+  type TextBearingObject,
   type TextObject,
 } from '@canvasly/shared';
 import {
-  ArrowDownToLine,
-  ArrowUpToLine,
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
+  Bold,
   ChartColumn,
   ChevronDown,
+  ChevronUp,
   Columns2,
-  Copy,
   CornerDownRight,
+  EllipsisVertical,
   Group,
+  Highlighter,
+  Italic,
+  Link2,
+  List,
+  ListOrdered,
   Lock,
   LockOpen,
-  Minus,
+  MessageCircleMore,
   MoveUpRight,
-  Plus,
   Rows2,
-  Trash,
+  Shapes,
+  Strikethrough,
+  Underline,
   Ungroup,
 } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
 import type { Actions } from '../doc/actions';
 import { ROTATE_ANCHOR_OFFSET } from '../canvas/Overlay';
-import { FONTS, ensureFont, textBox } from '../canvas/text';
+import { SHAPE_LABELS } from '../canvas/shapePaths';
+import { FONTS, FONT_MENU, ensureFont, textBox } from '../canvas/text';
 import { useBoard, useDocVersion } from '../doc/context';
 import {
   addTableColumn,
   addTableRow,
+  convertObject,
   deleteTableColumn,
   deleteTableRow,
   selectionBounds,
   updateEach,
+  type ConvertTarget,
 } from '../doc/ops';
 import { usePrefs } from '../state/prefs';
 import { useUI } from '../state/ui';
 import { useViewport } from '../state/viewport';
+import { objectContextEntries } from './boardMenus';
+import { CustomColor } from './CustomColor';
 import { IconButton, Swatch, panel } from './IconButton';
+import { MenuList } from './Menu';
 
 const FILL_COLORS = [
   'transparent',
@@ -58,84 +87,362 @@ const FILL_COLORS = [
   '#1a1a1a',
 ];
 
+const HIGHLIGHT_COLORS = [
+  'transparent',
+  '#fff3bf',
+  '#f5d128',
+  '#c9df56',
+  '#6cd8fa',
+  '#ff9d48',
+  '#ea94bb',
+  '#be88c7',
+];
+
+const RAIL_WIDTH = 72;
+
+const FONT_SIZES = [8, 10, 12, 14, 18, 24, 30, 36, 48, 64, 80, 96, 144, 200, 288, 400];
+
+/** Only one of the toolbar's dropdowns is open at a time. */
+const OpenMenu = createContext<{ open: string | null; setOpen: (id: string | null) => void }>({
+  open: null,
+  setOpen: () => {},
+});
+
+function useDropdown(id: string) {
+  const { open, setOpen } = useContext(OpenMenu);
+  const isOpen = open === id;
+  return { isOpen, toggle: () => setOpen(isOpen ? null : id), close: () => setOpen(null) };
+}
+
+/** Opens below its button, or above it when it would run off the bottom of the screen. */
+function Dropdown({ className = '', children }: { className?: string; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [up, setUp] = useState(false);
+  useLayoutEffect(() => {
+    const r = ref.current?.getBoundingClientRect();
+    if (r && r.bottom > window.innerHeight - 8) setUp(true);
+  }, []);
+  return (
+    <div ref={ref} className={`absolute z-10 ${up ? 'bottom-11' : 'top-11'} ${className}`}>
+      {children}
+    </div>
+  );
+}
+
 function ColorPicker({
   label,
   value,
   colors,
   onPick,
+  icon,
 }: {
   label: string;
   value: string | undefined;
   colors: readonly string[];
   onPick: (c: string) => void;
+  /** Shown instead of a swatch of the current color. */
+  icon?: ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
+  const { isOpen, toggle, close } = useDropdown(`color-${label}`);
+  const pick = (c: string) => {
+    onPick(c);
+    close();
+  };
   return (
     <div className="relative">
-      <div
-        title={label}
-        className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800"
-      >
-        <Swatch color={value ?? '#ffffff'} onClick={() => setOpen((o) => !o)} />
-      </div>
-      {open && (
-        <div className={`${panel} absolute top-11 left-1/2 grid -translate-x-1/2 grid-cols-6 gap-1.5 p-2`}>
-          {colors.map((c) => (
-            <Swatch
-              key={c}
-              color={c}
-              active={c === value}
-              onClick={() => {
-                onPick(c);
-                setOpen(false);
-              }}
-            />
-          ))}
+      {icon ? (
+        <IconButton label={label} active={isOpen} onClick={toggle}>
+          {icon}
+        </IconButton>
+      ) : (
+        <div
+          title={label}
+          className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800"
+        >
+          <Swatch color={value ?? '#ffffff'} onClick={toggle} />
         </div>
+      )}
+      {isOpen && (
+        <Dropdown className={`${panel} left-1/2 grid w-max -translate-x-1/2 grid-cols-6 gap-1.5 p-2`}>
+          {colors.map((c) => (
+            <Swatch key={c} color={c} active={c === value} onClick={() => pick(c)} />
+          ))}
+          <CustomColor value={value} onPick={pick} />
+        </Dropdown>
       )}
     </div>
   );
 }
 
+/** An icon with a bar under it showing the color it applies. */
+function ColorIcon({ color, children }: { color: string | undefined; children: ReactNode }) {
+  return (
+    <span className="flex flex-col items-center gap-0.5">
+      {children}
+      <span
+        className="h-[3px] w-5 rounded-full border border-black/10 dark:border-white/40"
+        style={{ background: color === 'transparent' ? 'transparent' : color }}
+      />
+    </span>
+  );
+}
+
 function FontPicker({ value, onPick }: { value: FontId; onPick: (font: FontId) => void }) {
-  const [open, setOpen] = useState(false);
+  const { isOpen, toggle, close } = useDropdown('font');
   return (
     <div className="relative">
       <button
         type="button"
         title="Font"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-        className="flex h-9 items-center gap-1 rounded-lg px-2 text-sm whitespace-nowrap hover:bg-gray-100 dark:hover:bg-zinc-800"
+        aria-expanded={isOpen}
+        onClick={toggle}
+        className="flex h-10 items-center gap-1 rounded-lg px-2 text-sm whitespace-nowrap hover:bg-gray-100 dark:hover:bg-zinc-800"
         data-testid="font-picker"
       >
-        <span className="max-w-28 truncate" style={{ fontFamily: FONTS[value].family }}>
+        <span className="w-24 truncate text-left" style={{ fontFamily: FONTS[value].family }}>
           {FONTS[value].label}
         </span>
         <ChevronDown size={14} className="shrink-0" />
       </button>
-      {open && (
-        <div className={`${panel} absolute top-11 left-0 w-52 p-1`} role="listbox" aria-label="Font">
-          {FONT_IDS.map((id) => (
-            <button
-              key={id}
-              type="button"
-              role="option"
-              aria-selected={id === value}
-              onClick={() => {
-                onPick(id);
-                setOpen(false);
-              }}
-              className={`block w-full rounded-md px-2.5 py-1.5 text-left text-[15px] whitespace-nowrap hover:bg-gray-100 dark:hover:bg-zinc-800 ${
-                id === value ? 'text-indigo-600 dark:text-indigo-400' : ''
-              }`}
-              style={{ fontFamily: FONTS[id].family }}
-              data-testid={`font-${id}`}
-            >
-              {FONTS[id].label}
-            </button>
-          ))}
+      {isOpen && (
+        <Dropdown className={`${panel} left-0 max-h-80 w-56 overflow-y-auto p-1`}>
+          <div role="listbox" aria-label="Font">
+            {FONT_MENU.map((id) => (
+              <button
+                key={id}
+                type="button"
+                role="option"
+                aria-selected={id === value}
+                onClick={() => {
+                  onPick(id);
+                  close();
+                }}
+                className={`block w-full rounded-md px-2.5 py-1.5 text-left text-[15px] whitespace-nowrap hover:bg-gray-100 dark:hover:bg-zinc-800 ${
+                  id === value ? 'text-indigo-600 dark:text-indigo-400' : ''
+                }`}
+                style={{ fontFamily: FONTS[id].family }}
+                data-testid={`font-${id}`}
+              >
+                {FONTS[id].label}
+              </button>
+            ))}
+          </div>
+        </Dropdown>
+      )}
+    </div>
+  );
+}
+
+function FontSizeControl({ value, onChange }: { value: number; onChange: (size: number) => void }) {
+  const size = Math.round(value);
+  const up = FONT_SIZES.find((s) => s > size) ?? 400;
+  const down = [...FONT_SIZES].reverse().find((s) => s < size) ?? 4;
+  const stepper = 'flex h-4 w-5 items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-zinc-800';
+  return (
+    <div className="flex items-center">
+      <input
+        key={size}
+        defaultValue={size}
+        inputMode="numeric"
+        aria-label="Font size"
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === 'Enter') e.currentTarget.blur();
+        }}
+        onBlur={(e) => {
+          const n = Math.round(Number(e.currentTarget.value));
+          if (Number.isFinite(n) && n > 0 && n !== size) onChange(Math.min(400, Math.max(4, n)));
+          else e.currentTarget.value = String(size);
+        }}
+        className="h-8 w-9 rounded-md bg-transparent text-center text-sm tabular-nums outline-none hover:bg-gray-100 focus:bg-gray-100 dark:hover:bg-zinc-800 dark:focus:bg-zinc-800"
+        data-testid="font-size"
+      />
+      <div className="flex flex-col">
+        <button type="button" aria-label="Bigger text" className={stepper} onClick={() => onChange(up)}>
+          <ChevronUp size={14} />
+        </button>
+        <button type="button" aria-label="Smaller text" className={stepper} onClick={() => onChange(down)}>
+          <ChevronDown size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** A button that opens a small row of toggles. */
+function ToggleMenu({
+  id,
+  label,
+  icon,
+  active,
+  testId,
+  children,
+}: {
+  id: string;
+  label: string;
+  icon: ReactNode;
+  active?: boolean;
+  testId: string;
+  children: ReactNode;
+}) {
+  const { isOpen, toggle } = useDropdown(id);
+  return (
+    <div className="relative">
+      <IconButton label={label} active={isOpen || active} onClick={toggle} data-testid={testId}>
+        {icon}
+      </IconButton>
+      {isOpen && (
+        <Dropdown className={`${panel} left-1/2 flex w-max -translate-x-1/2 gap-0.5 p-1`}>
+          {children}
+        </Dropdown>
+      )}
+    </div>
+  );
+}
+
+function LinkForm({
+  value,
+  onSet,
+  close,
+}: {
+  value: string | null;
+  onSet: (link: string | null) => void;
+  close: () => void;
+}) {
+  const [draft, setDraft] = useState(value ?? '');
+  const [invalid, setInvalid] = useState(false);
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    const text = draft.trim();
+    if (!text) {
+      onSet(null);
+      close();
+      return;
+    }
+    const url = /^[a-z][a-z0-9+.-]*:/i.test(text) ? text : `https://${text}`;
+    if (!isSafeLink(url)) {
+      setInvalid(true);
+      return;
+    }
+    onSet(url);
+    close();
+  };
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-2">
+      <div className="flex gap-1.5">
+        <input
+          autoFocus
+          value={draft}
+          placeholder="Paste a link"
+          aria-label="Link address"
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setInvalid(false);
+          }}
+          onKeyDown={(e) => e.stopPropagation()}
+          className="min-w-0 flex-1 rounded-md border border-gray-300 px-2 py-1 text-sm outline-none focus:border-indigo-500 dark:border-zinc-600 dark:bg-zinc-800"
+          data-testid="link-input"
+        />
+        <button
+          type="submit"
+          className="rounded-md bg-indigo-600 px-2.5 py-1 text-sm font-medium text-white hover:bg-indigo-700"
+          data-testid="link-apply"
+        >
+          Apply
+        </button>
+      </div>
+      {invalid && (
+        <p className="text-xs text-red-600 dark:text-red-400">Links must be http, https or mailto.</p>
+      )}
+      {value && (
+        <div className="flex items-center justify-between text-xs">
+          <a
+            href={value}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+            data-testid="link-open"
+          >
+            Open link
+          </a>
+          <button
+            type="button"
+            onClick={() => {
+              onSet(null);
+              close();
+            }}
+            className="text-gray-500 hover:text-red-600 dark:text-zinc-400"
+            data-testid="link-remove"
+          >
+            Remove
+          </button>
         </div>
+      )}
+      <p className="text-xs text-gray-500 dark:text-zinc-400">Ctrl or ⌘ + click the object to follow it.</p>
+    </form>
+  );
+}
+
+function LinkMenu({ value, onSet }: { value: string | null; onSet: (link: string | null) => void }) {
+  const { isOpen, toggle, close } = useDropdown('link');
+  return (
+    <div className="relative">
+      <IconButton label="Link" active={isOpen || !!value} onClick={toggle} data-testid="link-button">
+        <Link2 size={18} />
+      </IconButton>
+      {isOpen && (
+        <Dropdown className={`${panel} left-1/2 w-72 -translate-x-1/2 p-2.5`}>
+          <LinkForm value={value} onSet={onSet} close={close} />
+        </Dropdown>
+      )}
+    </div>
+  );
+}
+
+const CONVERT_TARGETS: { target: ConvertTarget; label: string }[] = [
+  { target: 'text', label: 'Text' },
+  { target: 'sticky', label: 'Sticky note' },
+  ...(['rect', 'roundrect', 'ellipse', 'diamond', 'hexagon', 'cloud'] as const).map((target) => ({
+    target,
+    label: SHAPE_LABELS[target],
+  })),
+];
+
+function ConvertMenu({ o }: { o: TextBearingObject }) {
+  const board = useBoard();
+  const { isOpen, toggle, close } = useDropdown('convert');
+  return (
+    <div className="relative">
+      <IconButton label="Change to" active={isOpen} onClick={toggle} data-testid="convert-menu">
+        <Shapes size={18} />
+      </IconButton>
+      {isOpen && (
+        <Dropdown className="left-0">
+          <MenuList
+            entries={CONVERT_TARGETS.filter((t) => t.target !== o.type).map(({ target, label }) => ({
+              label,
+              onSelect: () => convertObject(board, o, target),
+            }))}
+            onClose={close}
+          />
+        </Dropdown>
+      )}
+    </div>
+  );
+}
+
+function MoreMenu({ actions, title }: { actions: Actions; title: string }) {
+  const board = useBoard();
+  const { isOpen, toggle, close } = useDropdown('more');
+  return (
+    <div className="relative">
+      <IconButton label="More" active={isOpen} onClick={toggle} data-testid="selection-more">
+        <EllipsisVertical size={18} />
+      </IconButton>
+      {isOpen && (
+        <Dropdown className="right-0">
+          <MenuList entries={objectContextEntries(board, actions, title)} onClose={close} />
+        </Dropdown>
       )}
     </div>
   );
@@ -143,8 +450,10 @@ function FontPicker({ value, onPick }: { value: FontId; onPick: (font: FontId) =
 
 const Divider = () => <div className="mx-0.5 h-6 w-px bg-gray-200 dark:bg-zinc-700" />;
 
-/** A new font size, along with the box it needs. */
-const resizedText = (o: TextObject, fontSize: number) => ({ fontSize, ...textBox({ ...o, fontSize }) });
+/** A text box takes the size its new style needs. */
+function fitted(o: TextBearingObject, p: ObjectPatch): ObjectPatch {
+  return o.type === 'text' ? { ...p, ...textBox({ ...o, ...p } as TextObject) } : p;
+}
 
 /** Style controls that apply to every selected object of the relevant type. */
 function StyleControls({ objs, ids }: { objs: BoardObject[]; ids: string[] }) {
@@ -155,21 +464,123 @@ function StyleControls({ objs, ids }: { objs: BoardObject[]; ids: string[] }) {
   const controls: ReactNode[] = [];
 
   const lettered = objs.filter(hasText);
-  if (lettered.length && lettered.length === objs.length) {
+  const lead = lettered[0];
+  if (lead && lettered.length === objs.length) {
+    const style = (fn: (o: TextBearingObject) => ObjectPatch) =>
+      updateEach(board, ids, (o) => (hasText(o) ? fitted(o, fn(o)) : null));
+    const list = listKind(lead.text);
+    const setList = (kind: ListKind) => style((o) => ({ text: toggleList(o.text, kind) }));
+    const AlignIcon = lead.align === 'center' ? AlignCenter : lead.align === 'right' ? AlignRight : AlignLeft;
     controls.push(
+      objs.length === 1 && <ConvertMenu key="convert" o={lead} />,
       <FontPicker
         key="font"
-        value={lettered[0]!.font}
-        onPick={(font) => {
-          // Text boxes resize to the new font, which has to be loaded before it can be measured.
-          void ensureFont(font).then(() =>
-            updateEach(board, ids, (o) => {
-              if (o.type === 'text') return { font, ...textBox({ ...o, font }) };
-              return hasText(o) ? { font } : null;
-            }),
-          );
-        }}
+        value={lead.font}
+        // The text box resizes to the new font, which has to be loaded before it can be measured.
+        onPick={(font) => void ensureFont(font).then(() => style(() => ({ font })))}
       />,
+      lead.type === 'text' && types.size === 1 && (
+        <FontSizeControl
+          key="size"
+          value={lead.fontSize}
+          onChange={(fontSize) => style(() => ({ fontSize }))}
+        />
+      ),
+      <Divider key="divider-font" />,
+      <ToggleMenu
+        key="format"
+        id="format"
+        label="Text format"
+        icon={<Bold size={18} />}
+        active={lead.bold || lead.italic || lead.underline || lead.strike}
+        testId="text-format"
+      >
+        <IconButton
+          label="Bold"
+          active={lead.bold}
+          onClick={() => style(() => ({ bold: !lead.bold }))}
+          data-testid="format-bold"
+        >
+          <Bold size={18} />
+        </IconButton>
+        <IconButton
+          label="Italic"
+          active={lead.italic}
+          onClick={() => style(() => ({ italic: !lead.italic }))}
+          data-testid="format-italic"
+        >
+          <Italic size={18} />
+        </IconButton>
+        <IconButton
+          label="Underline"
+          active={lead.underline}
+          onClick={() => style(() => ({ underline: !lead.underline }))}
+          data-testid="format-underline"
+        >
+          <Underline size={18} />
+        </IconButton>
+        <IconButton
+          label="Strikethrough"
+          active={lead.strike}
+          onClick={() => style(() => ({ strike: !lead.strike }))}
+          data-testid="format-strike"
+        >
+          <Strikethrough size={18} />
+        </IconButton>
+      </ToggleMenu>,
+      <ToggleMenu key="align" id="align" label="Align" icon={<AlignIcon size={18} />} testId="text-align">
+        <IconButton
+          label="Align left"
+          active={lead.align === 'left'}
+          onClick={() => style(() => ({ align: 'left' }))}
+          data-testid="align-left"
+        >
+          <AlignLeft size={18} />
+        </IconButton>
+        <IconButton
+          label="Align center"
+          active={lead.align === 'center'}
+          onClick={() => style(() => ({ align: 'center' }))}
+          data-testid="align-center"
+        >
+          <AlignCenter size={18} />
+        </IconButton>
+        <IconButton
+          label="Align right"
+          active={lead.align === 'right'}
+          onClick={() => style(() => ({ align: 'right' }))}
+          data-testid="align-right"
+        >
+          <AlignRight size={18} />
+        </IconButton>
+      </ToggleMenu>,
+      <ToggleMenu
+        key="list"
+        id="list"
+        label="List"
+        icon={list === 'number' ? <ListOrdered size={18} /> : <List size={18} />}
+        active={!!list}
+        testId="text-list"
+      >
+        <IconButton
+          label="Bulleted list"
+          active={list === 'bullet'}
+          onClick={() => setList('bullet')}
+          data-testid="list-bullet"
+        >
+          <List size={18} />
+        </IconButton>
+        <IconButton
+          label="Numbered list"
+          active={list === 'number'}
+          onClick={() => setList('number')}
+          data-testid="list-number"
+        >
+          <ListOrdered size={18} />
+        </IconButton>
+      </ToggleMenu>,
+      <LinkMenu key="link" value={lead.link} onSet={(link) => style(() => ({ link }))} />,
+      <Divider key="divider-format" />,
     );
   }
   if (only('sticky') && first?.type === 'sticky') {
@@ -203,6 +614,18 @@ function StyleControls({ objs, ids }: { objs: BoardObject[]; ids: string[] }) {
         colors={['transparent', ...STROKE_COLORS]}
         onPick={(stroke) => updateEach(board, ids, (o) => (isShapeObject(o) ? { stroke } : null))}
       />,
+      <ColorPicker
+        key="shape-text"
+        label="Text color"
+        value={shapes[0]!.textColor}
+        colors={STROKE_COLORS}
+        icon={
+          <ColorIcon color={shapes[0]!.textColor}>
+            <span className="text-sm leading-none font-semibold">A</span>
+          </ColorIcon>
+        }
+        onPick={(textColor) => updateEach(board, ids, (o) => (isShapeObject(o) ? { textColor } : null))}
+      />,
     );
   }
   if (only('text') && first?.type === 'text') {
@@ -212,33 +635,33 @@ function StyleControls({ objs, ids }: { objs: BoardObject[]; ids: string[] }) {
         label="Text color"
         value={first.color}
         colors={STROKE_COLORS}
+        icon={
+          <ColorIcon color={first.color}>
+            <span className="text-sm leading-none font-semibold">A</span>
+          </ColorIcon>
+        }
         onPick={(color) => updateEach(board, ids, (o) => (o.type === 'text' ? { color } : null))}
       />,
-      <IconButton
-        key="smaller"
-        label="Smaller text"
-        onClick={() =>
-          updateEach(board, ids, (o) =>
-            o.type === 'text' ? resizedText(o, Math.max(8, Math.round(o.fontSize) - 4)) : null,
-          )
+      <ColorPicker
+        key="highlight"
+        label="Highlight"
+        value={first.highlight}
+        colors={HIGHLIGHT_COLORS}
+        icon={
+          <ColorIcon color={first.highlight}>
+            <Highlighter size={15} />
+          </ColorIcon>
         }
-      >
-        <Minus size={16} />
-      </IconButton>,
-      <span key="size" className="w-7 text-center text-sm tabular-nums text-gray-600">
-        {Math.round(first.fontSize)}
-      </span>,
-      <IconButton
-        key="bigger"
-        label="Bigger text"
-        onClick={() =>
-          updateEach(board, ids, (o) =>
-            o.type === 'text' ? resizedText(o, Math.min(400, Math.round(o.fontSize) + 4)) : null,
-          )
-        }
-      >
-        <Plus size={16} />
-      </IconButton>,
+        onPick={(highlight) => updateEach(board, ids, (o) => (o.type === 'text' ? { highlight } : null))}
+      />,
+      <Divider key="divider-color" />,
+      <ColorPicker
+        key="background"
+        label="Background"
+        value={first.background}
+        colors={FILL_COLORS}
+        onPick={(background) => updateEach(board, ids, (o) => (o.type === 'text' ? { background } : null))}
+      />,
     );
   }
   if (only('pen') && first?.type === 'pen') {
@@ -418,7 +841,105 @@ export function ObjectSizeTag() {
   );
 }
 
-export function SelectionToolbar({ actions }: { actions: Actions }) {
+function ToolbarBody({
+  objs,
+  ids,
+  actions,
+  title,
+}: {
+  objs: BoardObject[];
+  ids: string[];
+  actions: Actions;
+  title: string;
+}) {
+  const board = useBoard();
+  const camera = useViewport((s) => s.camera);
+  const viewWidth = useViewport((s) => s.width);
+  const [open, setOpen] = useState<string | null>(null);
+  const [toolbarWidth, setToolbarWidth] = useState(440);
+  const root = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    const measure = () => setToolbarWidth(el.offsetWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // The canvas keeps focus where it is on pointer down, so inputs have to be told to commit.
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => {
+      if (root.current?.contains(e.target as Node)) return;
+      setOpen(null);
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && root.current?.contains(active)) active.blur();
+    };
+    window.addEventListener('pointerdown', onDown, true);
+    return () => window.removeEventListener('pointerdown', onDown, true);
+  }, []);
+
+  const bounds = selectionBounds(board.store, ids);
+  if (!bounds) return null;
+  const top = worldToScreen(camera, { x: bounds.x + bounds.w / 2, y: bounds.y });
+  const bottom = worldToScreen(camera, { x: 0, y: bounds.y + bounds.h }).y;
+  // Sit above the Transformer's rotate handle; flip below the selection near the top edge.
+  const above = top.y - ROTATE_ANCHOR_OFFSET - 64;
+  const y = above > 60 ? above : bottom + 16;
+  const half = toolbarWidth / 2;
+  // Stay clear of the tool rail, which only sits on the left on wider screens.
+  const leftEdge = viewWidth >= 640 ? RAIL_WIDTH + half : half + 8;
+  const x = Math.min(Math.max(top.x, leftEdge), Math.max(leftEdge, viewWidth - half - 8));
+
+  const locked = objs.every((o) => o.locked);
+  const grouped = objs.some((o) => o.groupId);
+  return (
+    <OpenMenu.Provider value={{ open, setOpen }}>
+      <div
+        ref={root}
+        className={`${panel} absolute z-10 flex w-max max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-0.5 p-1`}
+        style={{ left: x, top: y }}
+        onPointerDown={(e) => e.stopPropagation()}
+        data-testid="selection-toolbar"
+      >
+        {!locked && <StyleControls objs={objs} ids={ids} />}
+        {!locked &&
+          (grouped ? (
+            <IconButton label="Ungroup (Ctrl Shift G)" onClick={actions.ungroup}>
+              <Ungroup size={18} />
+            </IconButton>
+          ) : (
+            objs.length > 1 && (
+              <IconButton label="Group (Ctrl G)" onClick={actions.group}>
+                <Group size={18} />
+              </IconButton>
+            )
+          ))}
+        {!board.anonymous && (
+          <IconButton
+            label="Comment"
+            onClick={() => useUI.getState().setCommentDraft({ x: bounds.x + bounds.w, y: bounds.y })}
+            data-testid="selection-comment"
+          >
+            <MessageCircleMore size={18} />
+          </IconButton>
+        )}
+        <IconButton
+          label={locked ? 'Unlock (Ctrl Shift L)' : 'Lock (Ctrl Shift L)'}
+          active={locked}
+          onClick={actions.toggleLock}
+        >
+          {locked ? <Lock size={18} /> : <LockOpen size={18} />}
+        </IconButton>
+        <MoreMenu actions={actions} title={title} />
+      </div>
+    </OpenMenu.Provider>
+  );
+}
+
+export function SelectionToolbar({ actions, title }: { actions: Actions; title: string }) {
   const board = useBoard();
   useDocVersion(board);
   const selectedIds = useUI((s) => s.selectedIds);
@@ -426,66 +947,9 @@ export function SelectionToolbar({ actions }: { actions: Actions }) {
   const editingId = useUI((s) => s.editingId);
   const editingCell = useUI((s) => s.editingCell);
   const readOnly = useUI((s) => s.readOnly);
-  const camera = useViewport((s) => s.camera);
-  const width = useViewport((s) => s.width);
-
   const objs = selectedIds.map((id) => board.store.get(id)).filter((o) => o !== undefined);
-  const bounds = selectionBounds(board.store, selectedIds);
-  if (!objs.length || !bounds || interacting || editingId || editingCell || readOnly) return null;
-
-  const top = worldToScreen(camera, { x: bounds.x + bounds.w / 2, y: bounds.y });
-  const bottom = worldToScreen(camera, { x: 0, y: bounds.y + bounds.h }).y;
-  // Sit above the Transformer's rotate handle; flip below the selection near the top edge.
-  const above = top.y - ROTATE_ANCHOR_OFFSET - 64;
-  const y = above > 60 ? above : bottom + 16;
-  const x = Math.min(Math.max(top.x, 220), Math.max(220, width - 220));
-
-  const locked = objs.every((o) => o.locked);
-  const grouped = objs.some((o) => o.groupId);
+  if (!objs.length || interacting || editingId || editingCell || readOnly) return null;
   return (
-    <div
-      className={`${panel} absolute z-10 flex -translate-x-1/2 items-center gap-0.5 p-1`}
-      style={{ left: x, top: y }}
-      onPointerDown={(e) => e.stopPropagation()}
-      data-testid="selection-toolbar"
-    >
-      {!locked && <StyleControls objs={objs} ids={selectedIds} />}
-      {!locked && (
-        <>
-          <IconButton label="Bring to front (])" onClick={actions.bringToFront}>
-            <ArrowUpToLine size={16} />
-          </IconButton>
-          <IconButton label="Send to back ([)" onClick={actions.sendToBack}>
-            <ArrowDownToLine size={16} />
-          </IconButton>
-          {grouped ? (
-            <IconButton label="Ungroup (Ctrl Shift G)" onClick={actions.ungroup}>
-              <Ungroup size={16} />
-            </IconButton>
-          ) : (
-            objs.length > 1 && (
-              <IconButton label="Group (Ctrl G)" onClick={actions.group}>
-                <Group size={16} />
-              </IconButton>
-            )
-          )}
-          <IconButton label="Duplicate (Ctrl D)" onClick={actions.duplicateSelected}>
-            <Copy size={16} />
-          </IconButton>
-        </>
-      )}
-      <IconButton
-        label={locked ? 'Unlock (Ctrl Shift L)' : 'Lock (Ctrl Shift L)'}
-        active={locked}
-        onClick={actions.toggleLock}
-      >
-        {locked ? <Lock size={16} /> : <LockOpen size={16} />}
-      </IconButton>
-      {!locked && (
-        <IconButton label="Delete (Del)" onClick={actions.deleteSelected}>
-          <Trash size={16} />
-        </IconButton>
-      )}
-    </div>
+    <ToolbarBody key={selectedIds.join()} objs={objs} ids={selectedIds} actions={actions} title={title} />
   );
 }

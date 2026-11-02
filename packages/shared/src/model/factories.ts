@@ -21,6 +21,15 @@ export const newId = (): string => nanoid(12);
 export const STICKY_SIZE = 200;
 export const DEFAULT_SHAPE_SIZE = { w: 160, h: 100 };
 
+const PLAIN_TEXT = {
+  font: 'sans',
+  bold: false,
+  italic: false,
+  underline: false,
+  strike: false,
+  link: null,
+} as const;
+
 export function makeSticky(at: Vec, z: string, color: string = STICKY_COLORS[0]): StickyObject {
   return {
     id: newId(),
@@ -35,7 +44,8 @@ export function makeSticky(at: Vec, z: string, color: string = STICKY_COLORS[0])
     rotation: 0,
     color,
     text: '',
-    font: 'sans',
+    align: 'center',
+    ...PLAIN_TEXT,
   };
 }
 
@@ -55,7 +65,9 @@ export function makeText(at: Vec, z: string, color = '#1a1a1a', fontSize = 24): 
     fontSize,
     color,
     align: 'left',
-    font: 'sans',
+    highlight: 'transparent',
+    background: 'transparent',
+    ...PLAIN_TEXT,
     autoWidth: true,
   };
 }
@@ -79,7 +91,8 @@ export function makeShape(
     strokeWidth: 2,
     text: '',
     textColor: '#1a1a1a',
-    font: 'sans',
+    align: 'center',
+    ...PLAIN_TEXT,
   };
 }
 

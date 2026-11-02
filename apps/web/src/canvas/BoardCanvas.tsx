@@ -37,7 +37,7 @@ function useCursor(): string {
   if (panning) return 'grabbing';
   if (spacePan || tool === 'hand') return 'grab';
   if (tool === 'select') return 'default';
-  if (tool === 'eraser') return 'none';
+  if (tool === 'eraser' || tool === 'spoteraser') return 'none';
   return 'crosshair';
 }
 

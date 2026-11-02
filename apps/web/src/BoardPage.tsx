@@ -358,7 +358,7 @@ function BoardView({
             onShare={() => setShareOpen(true)}
           />
           <Toolbar onImage={openImagePicker} actions={actions} />
-          <SelectionToolbar actions={actions} />
+          <SelectionToolbar actions={actions} title={meta.title} />
           <ObjectSizeTag />
           <ZoomControls onFit={actions.zoomToFit} />
           <Minimap />

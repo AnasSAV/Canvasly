@@ -1,12 +1,6 @@
-import '@fontsource/bebas-neue/latin-400.css';
-import '@fontsource/caveat/latin-400.css';
-import '@fontsource/inter/latin-400.css';
-import '@fontsource/jetbrains-mono/latin-400.css';
-import '@fontsource/merriweather/latin-400.css';
-import '@fontsource/permanent-marker/latin-400.css';
-import '@fontsource/playfair-display/latin-400.css';
-import '@fontsource/poppins/latin-400.css';
+import '../fonts.css';
 import {
+  FONT_IDS,
   fitFontSize,
   wrapText,
   type BoardObject,
@@ -21,19 +15,58 @@ export const FONT_FAMILY =
 export const LINE_HEIGHT = 1.25;
 export const STICKY_PADDING = 14;
 export const SHAPE_PADDING = 10;
+/** How far a text object's background extends past its box. */
+export const TEXT_BACKGROUND_PADDING = 4;
 
-/** Fonts are self-hosted, so they cost no third-party requests. Latin only; other scripts fall back. */
-export const FONTS: Record<FontId, { label: string; family: string }> = {
-  sans: { label: 'Default', family: FONT_FAMILY },
-  inter: { label: 'Inter', family: `"Inter", ${FONT_FAMILY}` },
-  poppins: { label: 'Poppins', family: `"Poppins", ${FONT_FAMILY}` },
-  merriweather: { label: 'Merriweather', family: '"Merriweather", Georgia, serif' },
-  playfair: { label: 'Playfair Display', family: '"Playfair Display", Georgia, serif' },
-  mono: { label: 'JetBrains Mono', family: '"JetBrains Mono", ui-monospace, Consolas, monospace' },
-  caveat: { label: 'Caveat', family: '"Caveat", cursive' },
-  marker: { label: 'Permanent Marker', family: '"Permanent Marker", cursive' },
+/** Web fonts are Latin only, and other scripts fall back. `system` fonts are never downloaded. */
+export const FONTS: Record<FontId, { label: string; family: string; system?: boolean }> = {
+  sans: { label: 'Default', family: FONT_FAMILY, system: true },
+  abril: { label: 'Abril Fatface', family: '"Abril Fatface", Georgia, serif' },
+  arial: { label: 'Arial', family: 'Arial, Helvetica, sans-serif', system: true },
+  bangers: { label: 'Bangers', family: '"Bangers", Impact, sans-serif' },
   bebas: { label: 'Bebas Neue', family: '"Bebas Neue", Impact, sans-serif' },
+  caveat: { label: 'Caveat', family: '"Caveat", cursive' },
+  courier: { label: 'Courier New', family: '"Courier New", Courier, monospace', system: true },
+  fredoka: { label: 'Fredoka One', family: `"Fredoka One", ${FONT_FAMILY}` },
+  garamond: { label: 'EB Garamond', family: '"EB Garamond", Georgia, serif' },
+  georgia: { label: 'Georgia', family: 'Georgia, "Times New Roman", serif', system: true },
+  graduate: { label: 'Graduate', family: '"Graduate", Georgia, serif' },
+  gravitas: { label: 'Gravitas One', family: '"Gravitas One", Georgia, serif' },
+  inter: { label: 'Inter', family: `"Inter", ${FONT_FAMILY}` },
+  lato: { label: 'Lato', family: `"Lato", ${FONT_FAMILY}` },
+  merriweather: { label: 'Merriweather', family: '"Merriweather", Georgia, serif' },
+  mono: { label: 'JetBrains Mono', family: '"JetBrains Mono", ui-monospace, Consolas, monospace' },
+  montserrat: { label: 'Montserrat', family: `"Montserrat", ${FONT_FAMILY}` },
+  noto: { label: 'Noto Sans', family: `"Noto Sans", ${FONT_FAMILY}` },
+  opensans: { label: 'Open Sans', family: `"Open Sans", ${FONT_FAMILY}` },
+  oswald: { label: 'Oswald', family: `"Oswald", ${FONT_FAMILY}` },
+  marker: { label: 'Permanent Marker', family: '"Permanent Marker", cursive' },
+  playfair: { label: 'Playfair Display', family: '"Playfair Display", Georgia, serif' },
+  plexmono: { label: 'IBM Plex Mono', family: '"IBM Plex Mono", ui-monospace, Consolas, monospace' },
+  plexsans: { label: 'IBM Plex Sans', family: `"IBM Plex Sans", ${FONT_FAMILY}` },
+  plexserif: { label: 'IBM Plex Serif', family: '"IBM Plex Serif", Georgia, serif' },
+  poppins: { label: 'Poppins', family: `"Poppins", ${FONT_FAMILY}` },
+  roboto: { label: 'Roboto', family: `"Roboto", ${FONT_FAMILY}` },
+  times: { label: 'Times New Roman', family: '"Times New Roman", Times, serif', system: true },
 };
+
+/** Default first, then alphabetical. */
+export const FONT_MENU: FontId[] = [
+  'sans',
+  ...FONT_IDS.filter((id) => id !== 'sans').sort((a, b) => FONTS[a].label.localeCompare(FONTS[b].label)),
+];
+
+/** What decides how wide text is. Objects carry these fields, so any of them can be passed as is. */
+export type TextFace = Pick<TextObject, 'font' | 'bold' | 'italic'>;
+const PLAIN: TextFace = { font: 'sans', bold: false, italic: false };
+
+/** Konva's fontStyle, and the prefix of a canvas font string. */
+export const fontStyle = (f: Pick<TextFace, 'bold' | 'italic'>): string =>
+  [f.italic && 'italic', f.bold && 'bold'].filter(Boolean).join(' ') || 'normal';
+
+/** Konva's textDecoration. A linked object is underlined so that it reads as a link. */
+export const textDecoration = (o: Pick<TextObject, 'underline' | 'strike' | 'link'>): string =>
+  [(o.underline || o.link) && 'underline', o.strike && 'line-through'].filter(Boolean).join(' ');
 
 /** Bumped whenever a font finishes loading, so canvas text drawn with its fallback can be redrawn. */
 export const useFontEpoch = create<{ epoch: number }>()(() => ({ epoch: 0 }));
@@ -44,11 +77,11 @@ const loading = new Map<FontId, Promise<void>>();
 
 /** Canvas text doesn't load web fonts by itself: wait for this before measuring or drawing with `font`. */
 export function ensureFont(font: FontId): Promise<void> {
-  if (font === 'sans') return Promise.resolve();
+  if (FONTS[font].system) return Promise.resolve();
   let p = loading.get(font);
   if (!p) {
-    p = document.fonts
-      .load(`16px ${FONTS[font].family}`)
+    const { family } = FONTS[font];
+    p = Promise.all(['', 'bold ', 'italic '].map((style) => document.fonts.load(`${style}16px ${family}`)))
       .then(() => {
         widthCache.clear();
         fitCache.clear();
@@ -69,30 +102,33 @@ export function ensureFonts(objects: Iterable<BoardObject>): Promise<unknown> {
 }
 
 let ctx: CanvasRenderingContext2D | null = null;
-const measurers = new Map<FontId, MeasureText>();
+const measurers = new Map<string, MeasureText>();
 
 /** Text width at `size`px. Width scales linearly with size, so we measure once at 100px and cache. */
-export function measureWith(font: FontId): MeasureText {
-  let measure = measurers.get(font);
+export function measureWith(face: TextFace = PLAIN): MeasureText {
+  const style = fontStyle(face);
+  const id = `${face.font}|${style}`;
+  let measure = measurers.get(id);
   if (!measure) {
+    const { family } = FONTS[face.font];
     measure = (text, size) => {
-      const key = `${font}|${text}`;
+      const key = `${id}|${text}`;
       let w = widthCache.get(key);
       if (w === undefined) {
         ctx ??= document.createElement('canvas').getContext('2d')!;
-        ctx.font = `100px ${FONTS[font].family}`;
+        ctx.font = `${style} 100px ${family}`;
         w = ctx.measureText(text).width;
         if (widthCache.size > 20_000) widthCache.clear();
         widthCache.set(key, w);
       }
       return (w * size) / 100;
     };
-    measurers.set(font, measure);
+    measurers.set(id, measure);
   }
   return measure;
 }
 
-export const measureText = measureWith('sans');
+export const measureText = measureWith();
 
 /** Auto-shrinking font size for text inside a box (stickies, shapes). */
 export function autoFontSize(
@@ -100,13 +136,13 @@ export function autoFontSize(
   w: number,
   h: number,
   padding: number,
-  font: FontId = 'sans',
+  face: TextFace = PLAIN,
 ): number {
   const max = Math.max(8, Math.round(Math.min(w, h) * 0.18));
-  const key = `${font}|${w}|${h}|${padding}|${text}`;
+  const key = `${face.font}|${fontStyle(face)}|${w}|${h}|${padding}|${text}`;
   let size = fitCache.get(key);
   if (size === undefined) {
-    size = fitFontSize(text, Math.max(1, w - padding * 2), Math.max(1, h - padding * 2), measureWith(font), {
+    size = fitFontSize(text, Math.max(1, w - padding * 2), Math.max(1, h - padding * 2), measureWith(face), {
       min: 4,
       max,
       lineHeight: LINE_HEIGHT,
@@ -117,20 +153,28 @@ export function autoFontSize(
   return size;
 }
 
-/** Height of `text` wrapped to `width` at `fontSize`, matching how text objects render. */
-export function textHeight(text: string, width: number, fontSize: number, font: FontId = 'sans'): number {
-  const lines = Math.max(1, wrapText(text, width, fontSize, measureWith(font)).length);
-  return lines * fontSize * LINE_HEIGHT;
-}
+type TextShape = Pick<TextObject, 'text' | 'w' | 'fontSize' | 'autoWidth'> & TextFace;
+
+const linesOf = (o: TextShape) =>
+  o.autoWidth ? o.text.split('\n') : wrapText(o.text, o.w, o.fontSize, measureWith(o));
 
 /** The box a text object should have: hugging its content, or keeping a fixed width and wrapping. */
-export function textBox(o: Pick<TextObject, 'text' | 'w' | 'fontSize' | 'font' | 'autoWidth'>) {
-  if (!o.autoWidth) return { w: o.w, h: textHeight(o.text, o.w, o.fontSize, o.font) };
-  const measure = measureWith(o.font);
-  const lines = o.text.split('\n');
+export function textBox(o: TextShape) {
+  const lines = linesOf(o);
+  const h = Math.max(1, lines.length) * o.fontSize * LINE_HEIGHT;
+  if (!o.autoWidth) return { w: o.w, h };
+  const measure = measureWith(o);
   const widest = Math.max(...lines.map((line) => measure(line, o.fontSize)));
-  return {
-    w: Math.max(Math.ceil(widest) + 2, Math.ceil(o.fontSize / 2)),
-    h: lines.length * o.fontSize * LINE_HEIGHT,
-  };
+  return { w: Math.max(Math.ceil(widest) + 2, Math.ceil(o.fontSize / 2)), h };
+}
+
+/** Where each line of a text object sits inside its box, for painting a highlight behind it. */
+export function textLineRects(o: TextShape & Pick<TextObject, 'align'>) {
+  const measure = measureWith(o);
+  const lineH = o.fontSize * LINE_HEIGHT;
+  return linesOf(o).map((line, i) => {
+    const w = measure(line, o.fontSize);
+    const x = o.align === 'center' ? (o.w - w) / 2 : o.align === 'right' ? o.w - w : 0;
+    return { x, y: i * lineH, w, h: lineH, empty: !line };
+  });
 }

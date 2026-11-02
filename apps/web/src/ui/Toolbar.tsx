@@ -20,6 +20,7 @@ import {
   Hand,
   Highlighter,
   ImagePlus,
+  Lasso,
   LayoutTemplate,
   MessageSquare,
   Minus,
@@ -36,14 +37,19 @@ import {
   Table,
   Type,
   Undo2,
+  WandSparkles,
   Workflow,
 } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { ink } from '../canvas/colors';
 import { SHAPE_LABELS, traceShape } from '../canvas/shapePaths';
 import type { Actions } from '../doc/actions';
 import type { Board } from '../doc/board';
 import { useBoard } from '../doc/context';
+import { useDrawing, type PresetKind } from '../state/drawing';
+import { useTheme } from '../state/theme';
 import { useUI, type Tool } from '../state/ui';
+import { CustomColor } from './CustomColor';
 import { IconButton, Swatch, panel } from './IconButton';
 import { addStressObjects } from './stress';
 import { TemplatePreview } from './TemplatePreview';
@@ -51,7 +57,6 @@ import { TemplatePreview } from './TemplatePreview';
 type Flyout = 'create' | 'templates' | 'shapes' | 'pen' | 'more';
 
 const HIGHLIGHT_COLORS = ['#f5d128', '#c9df56', '#6cd8fa', '#ff9d48', '#ea94bb', '#be88c7'];
-const PEN_SIZES = [2, 4, 8, 16];
 const STICKERS = [
   '👍',
   '❤️',
@@ -308,62 +313,129 @@ function ShapesPanel({ close }: { close: () => void }) {
   );
 }
 
+const DRAW_TOOLS: { tool: Tool; label: string; icon: ReactNode; testId: string }[] = [
+  { tool: 'pen', label: 'Pen (P)', icon: <Pencil size={18} />, testId: 'tool-draw-pen' },
+  { tool: 'highlighter', label: 'Highlighter', icon: <Highlighter size={18} />, testId: 'tool-highlighter' },
+  {
+    tool: 'smartpen',
+    label: 'Smart drawing: sketches become clean shapes',
+    icon: <WandSparkles size={18} />,
+    testId: 'tool-smartpen',
+  },
+  {
+    tool: 'spoteraser',
+    label: 'Eraser: removes only what you touch',
+    icon: <Eraser size={18} />,
+    testId: 'tool-spoteraser',
+  },
+  {
+    tool: 'eraser',
+    label: 'Stroke eraser: removes whole strokes (E)',
+    icon: (
+      <span className="relative">
+        <Eraser size={18} />
+        <span className="absolute -right-1 -bottom-0.5 text-[9px] leading-none font-bold">⋯</span>
+      </span>
+    ),
+    testId: 'tool-eraser',
+  },
+  {
+    tool: 'lasso',
+    label: 'Lasso: draw around objects to select them',
+    icon: <Lasso size={18} />,
+    testId: 'tool-lasso',
+  },
+];
+
 function PenPanel() {
-  const { tool, setTool, penColor, setPenColor, penSize, setPenSize, highlightColor, setHighlightColor } =
-    useUI();
+  const tool = useUI((s) => s.tool);
+  const setTool = useUI((s) => s.setTool);
+  const { presets, active, setActive, update } = useDrawing();
+  const dark = useTheme((s) => s.dark);
+  const [editing, setEditing] = useState(false);
+  const kind: PresetKind | null =
+    tool === 'highlighter' ? 'highlighter' : tool === 'pen' || tool === 'smartpen' ? 'pen' : null;
+  const current = kind ? presets[kind][active[kind]] : undefined;
   return (
-    <div className="flex w-52 flex-col gap-2 p-2" data-testid="pen-panel">
-      <div className="flex gap-0.5">
-        <IconButton label="Pen (P)" active={tool === 'pen'} onClick={() => setTool('pen')}>
-          <Pencil size={18} />
-        </IconButton>
-        <IconButton
-          label="Highlighter"
-          active={tool === 'highlighter'}
-          onClick={() => setTool('highlighter')}
-          data-testid="tool-highlighter"
-        >
-          <Highlighter size={18} />
-        </IconButton>
-        <IconButton
-          label="Eraser, pen strokes only (E)"
-          active={tool === 'eraser'}
-          onClick={() => setTool('eraser')}
-          data-testid="tool-eraser"
-        >
-          <Eraser size={18} />
-        </IconButton>
-      </div>
-      {tool === 'highlighter' ? (
-        <div className="grid grid-cols-6 gap-1.5">
-          {HIGHLIGHT_COLORS.map((c) => (
-            <Swatch key={c} color={c} active={c === highlightColor} onClick={() => setHighlightColor(c)} />
-          ))}
-        </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-6 gap-1.5">
-            {STROKE_COLORS.map((c) => (
-              <Swatch key={c} color={c} active={c === penColor} onClick={() => setPenColor(c)} />
-            ))}
-          </div>
-          <div className="flex items-center justify-between">
-            {PEN_SIZES.map((s) => (
+    <div className="flex" data-testid="pen-panel">
+      <div className="flex flex-col items-center gap-0.5 p-1">
+        {DRAW_TOOLS.map((t) => (
+          <IconButton
+            key={t.tool}
+            label={t.label}
+            active={tool === t.tool}
+            onClick={() => setTool(t.tool)}
+            data-testid={t.testId}
+          >
+            {t.icon}
+          </IconButton>
+        ))}
+        {kind && current && (
+          <>
+            <div className="my-1 h-px w-7 bg-gray-200 dark:bg-zinc-700" />
+            {presets[kind].map((p, i) => (
               <button
-                key={s}
+                key={i}
                 type="button"
-                aria-label={`Pen size ${s}`}
-                onClick={() => setPenSize(s)}
-                className={`flex h-8 w-8 items-center justify-center rounded-md ${s === penSize ? 'bg-indigo-100 dark:bg-indigo-500/20' : 'hover:bg-gray-100 dark:hover:bg-zinc-800'}`}
+                title={i === active[kind] ? 'Change color and size' : `${p.color}, size ${p.size}`}
+                aria-label={`Preset ${i + 1}`}
+                aria-pressed={i === active[kind]}
+                onClick={() => {
+                  if (i === active[kind]) setEditing((v) => !v);
+                  else setActive(kind, i);
+                }}
+                className={`my-0.5 flex h-8 w-8 items-center justify-center rounded-full border-2 ${
+                  i === active[kind]
+                    ? 'border-indigo-600 dark:border-indigo-400'
+                    : 'border-gray-200 hover:border-gray-400 dark:border-zinc-700'
+                }`}
+                data-testid={`pen-preset-${i}`}
               >
                 <span
-                  className="rounded-full bg-gray-800 dark:bg-zinc-200"
-                  style={{ width: Math.min(s, 14), height: Math.min(s, 14) }}
+                  className="rounded-full"
+                  style={{
+                    width: Math.min(22, Math.max(3, p.size)),
+                    height: Math.min(22, Math.max(3, p.size)),
+                    background: ink(p.color, dark), // as strokes are drawn in this theme
+                    opacity: kind === 'highlighter' ? 0.6 : 1,
+                  }}
                 />
               </button>
             ))}
+            <div className="my-1">
+              <CustomColor value={current.color} onPick={(color) => update(kind, { color })} />
+            </div>
+          </>
+        )}
+      </div>
+      {kind && current && editing && (
+        <div
+          className="flex w-44 flex-col gap-3 border-l border-gray-200 p-2.5 dark:border-zinc-700"
+          data-testid="pen-preset-editor"
+        >
+          <div className="grid grid-cols-5 gap-1.5">
+            {(kind === 'highlighter' ? HIGHLIGHT_COLORS : STROKE_COLORS).map((c) => (
+              <Swatch
+                key={c}
+                color={c}
+                active={c === current.color}
+                onClick={() => update(kind, { color: c })}
+              />
+            ))}
           </div>
-        </>
+          <label className="text-xs font-medium text-gray-500 dark:text-zinc-400">
+            Size: {current.size}
+            <input
+              type="range"
+              min={1}
+              max={kind === 'highlighter' ? 60 : 40}
+              value={current.size}
+              onChange={(e) => update(kind, { size: Number(e.target.value) })}
+              className="mt-1 block w-full accent-indigo-600"
+              data-testid="pen-size"
+            />
+          </label>
+        </div>
       )}
     </div>
   );
@@ -489,7 +561,7 @@ export function Toolbar({ onImage, actions }: { onImage: () => void; actions: Ac
     setFlyout(null);
   };
   const close = () => setFlyout(null);
-  const penActive = tool === 'pen' || tool === 'highlighter' || tool === 'eraser';
+  const penActive = DRAW_TOOLS.some((t) => t.tool === tool);
   const shapeActive = isShape(tool) || tool === 'line' || tool === 'arrow';
 
   return (

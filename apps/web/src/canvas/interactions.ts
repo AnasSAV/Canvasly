@@ -1,6 +1,11 @@
 import {
   dist,
+  eraseFromStroke,
+  expandRect,
   hasText,
+  insertObject,
+  isSafeLink,
+  localToWorld,
   makeConnector,
   makeFrame,
   makePen,
@@ -8,6 +13,8 @@ import {
   makeSticky,
   makeText,
   nearestSideAnchor,
+  pointInPolygon,
+  recognizeStroke,
   rectContainsRect,
   rectFromPoints,
   screenToWorld,
@@ -38,6 +45,7 @@ import {
   selectionBounds,
   setStartView,
 } from '../doc/ops';
+import { currentPreset } from '../state/drawing';
 import { usePrefs } from '../state/prefs';
 import { useUI } from '../state/ui';
 import { useViewport } from '../state/viewport';
@@ -48,6 +56,9 @@ import { cellAt } from './widgets';
 export const GRID_SIZE = 20;
 const DRAG_THRESHOLD = 4; // screen px
 const SNAP_DISTANCE = 6; // screen px
+const STROKE_ERASER_RADIUS = 8; // screen px
+const SPOT_ERASER_RADIUS = 12; // screen px
+const SMART_MIN_SIZE = 24; // screen px; anything smaller stays as ink
 
 type Gesture =
   /** `rightClick`: started with the right button; releasing without moving opens the context menu. */
@@ -66,10 +77,11 @@ type Gesture =
     }
   | { kind: 'marquee'; start: Vec; startScreen: Vec; base: string[] }
   | { kind: 'shape'; shape: ShapeKind | 'frame' | 'startview'; start: Vec }
-  | { kind: 'pen'; points: number[]; color: string; size: number; opacity: number }
+  | { kind: 'pen'; points: number[]; color: string; size: number; opacity: number; smart: boolean }
+  | { kind: 'lasso'; points: number[] }
   | { kind: 'connector'; start: ConnectorEnd; startScreen: Vec; arrow: boolean }
   | { kind: 'reattach'; id: string; which: 'start' | 'end'; started: boolean; startScreen: Vec }
-  | { kind: 'eraser' }
+  | { kind: 'eraser'; spot: boolean; last: Vec }
   | { kind: 'pinch'; startDist: number; startMid: Vec; startCam: Camera };
 
 const DOUBLE_TAP_MS = 300;
@@ -79,6 +91,7 @@ const isShapeTool = (t: string): t is ShapeKind => (SHAPE_KINDS as readonly stri
 const ui = () => useUI.getState();
 const vp = () => useViewport.getState();
 const uniq = (ids: string[]) => [...new Set(ids)];
+const eraserRadius = (spot: boolean) => (spot ? SPOT_ERASER_RADIUS : STROKE_ERASER_RADIUS) / vp().camera.zoom;
 
 export const isEditableTarget = (e: Event): boolean =>
   e.target instanceof HTMLElement && !!e.target.closest('textarea, input, select, [contenteditable]');
@@ -304,6 +317,11 @@ export class Interactions {
     switch (u.tool) {
       case 'select': {
         const hit = hitTest(store, p, (e.pointerType === 'touch' ? 8 : 2) / zoom);
+        // Ctrl/Cmd-click follows a link (plain clicks select, so that linked objects can still be edited).
+        if ((e.ctrlKey || e.metaKey) && hit && hasText(hit) && hit.link && isSafeLink(hit.link)) {
+          window.open(hit.link, '_blank', 'noopener,noreferrer');
+          return;
+        }
         if (!hit && e.pointerType === 'touch') {
           // One finger on empty canvas pans (marquee needs a mouse or pen).
           this.g = { kind: 'pan', last: screen };
@@ -355,16 +373,19 @@ export class Interactions {
         return;
       }
       case 'pen':
+      case 'smartpen':
       case 'highlighter': {
         this.board.beginGesture();
-        const stroke =
-          u.tool === 'pen'
-            ? { color: u.penColor, size: u.penSize, opacity: 1 }
-            : { color: u.highlightColor, size: 24, opacity: 0.4 };
-        this.g = { kind: 'pen', points: [p.x, p.y], ...stroke };
+        const marker = u.tool === 'highlighter';
+        const { color, size } = currentPreset(marker ? 'highlighter' : 'pen');
+        const stroke = { color, size, opacity: marker ? 0.4 : 1 };
+        this.g = { kind: 'pen', points: [p.x, p.y], smart: u.tool === 'smartpen', ...stroke };
         u.setDraft({ kind: 'pen', points: [p.x, p.y], ...stroke });
         break;
       }
+      case 'lasso':
+        this.g = { kind: 'lasso', points: [p.x, p.y] };
+        break;
       case 'line':
       case 'arrow':
         this.g = {
@@ -375,10 +396,13 @@ export class Interactions {
         };
         break;
       case 'eraser':
+      case 'spoteraser': {
+        const spot = u.tool === 'spoteraser';
         this.board.beginGesture();
-        this.g = { kind: 'eraser' };
-        this.erase(p);
+        this.g = { kind: 'eraser', spot, last: p };
+        this.eraseAlong(p, p, spot);
         break;
+      }
       case 'hand':
         break;
     }
@@ -404,8 +428,9 @@ export class Interactions {
     const zoom = vp().camera.zoom;
 
     if (!g) {
-      if (u.tool === 'eraser') u.setDraft({ kind: 'eraser', x: p.x, y: p.y, r: 8 / zoom });
-      else if (u.tool === 'line' || u.tool === 'arrow') this.endAt(p, null);
+      if (u.tool === 'eraser' || u.tool === 'spoteraser') {
+        u.setDraft({ kind: 'eraser', x: p.x, y: p.y, r: eraserRadius(u.tool === 'spoteraser') });
+      } else if (u.tool === 'line' || u.tool === 'arrow') this.endAt(p, null);
       return;
     }
 
@@ -519,6 +544,14 @@ export class Interactions {
         this.schedule(() => ui().setDraft({ kind: 'pen', points: [...points], color, size, opacity }));
         break;
       }
+      case 'lasso': {
+        const n = g.points.length;
+        if (Math.hypot(p.x - g.points[n - 2]!, p.y - g.points[n - 1]!) * zoom < 3) return;
+        g.points.push(p.x, p.y);
+        const points = g.points;
+        this.schedule(() => ui().setDraft({ kind: 'lasso', points: [...points] }));
+        break;
+      }
       case 'connector': {
         const startId = g.start.kind === 'attached' ? g.start.objectId : null;
         u.setDraft({ kind: 'connector', start: g.start, end: this.endAt(p, startId), arrow: g.arrow });
@@ -540,8 +573,9 @@ export class Interactions {
         break;
       }
       case 'eraser': {
-        u.setDraft({ kind: 'eraser', x: p.x, y: p.y, r: 8 / zoom });
-        this.erase(p);
+        u.setDraft({ kind: 'eraser', x: p.x, y: p.y, r: eraserRadius(g.spot) });
+        this.eraseAlong(g.last, p, g.spot);
+        g.last = p;
         break;
       }
     }
@@ -624,8 +658,24 @@ export class Interactions {
       case 'pen': {
         u.setDraft(null);
         const pts = g.points.length === 2 ? [...g.points, g.points[0]! + 0.5, g.points[1]! + 0.5] : g.points;
-        addObjects(this.board, [makePen(pts, nextZ(store), g.color, g.size, g.opacity)]);
+        const z = nextZ(store);
+        const seen = g.smart ? recognizeStroke(pts, SMART_MIN_SIZE / vp().camera.zoom) : null;
+        if (seen?.kind === 'line') {
+          const end = (v: Vec): ConnectorEnd => ({ kind: 'point', x: v.x, y: v.y });
+          const line = makeConnector(end(seen.start), end(seen.end), z, { arrow: false, stroke: g.color });
+          addObjects(this.board, [{ ...line, strokeWidth: g.size }]);
+        } else if (seen) {
+          const shape = makeShape(seen.kind, seen.rect, z, { fill: 'transparent', stroke: g.color });
+          addObjects(this.board, [{ ...shape, strokeWidth: g.size }]);
+        } else {
+          addObjects(this.board, [makePen(pts, z, g.color, g.size, g.opacity)]);
+        }
         this.board.endGesture();
+        break;
+      }
+      case 'lasso': {
+        u.setDraft(null);
+        this.selectInLasso(g.points);
         break;
       }
       case 'connector': {
@@ -663,10 +713,77 @@ export class Interactions {
     if (ui().draft?.kind === 'eraser') ui().setDraft(null);
   };
 
-  private erase(p: Vec) {
-    const r = 8 / vp().camera.zoom;
-    const hit = hitTest(this.board.store, p, r, (o) => o.type === 'pen' && !o.locked);
-    if (hit) deleteObjects(this.board, [hit.id]);
+  /** Erase along the path the pointer just moved, so a fast swipe doesn't skip strokes. */
+  private eraseAlong(from: Vec, to: Vec, spot: boolean) {
+    const r = eraserRadius(spot);
+    const steps = Math.max(1, Math.ceil(dist(from, to) / r));
+    const centers: Vec[] = [];
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      centers.push({ x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t });
+    }
+    const { store, objects } = this.board;
+    if (!spot) {
+      for (const c of centers) {
+        const hit = hitTest(store, c, r, (o) => o.type === 'pen' && !o.locked);
+        if (hit) deleteObjects(this.board, [hit.id]);
+      }
+      return;
+    }
+    const near = expandRect(rectFromPoints(from, to), r + 64);
+    const replaced: [string, BoardObject[]][] = [];
+    for (const id of store.query(near)) {
+      const o = store.get(id);
+      if (o?.type !== 'pen' || o.locked) continue;
+      const local = centers.map((c) => worldToLocal(o, c));
+      const pieces = eraseFromStroke(o.points, local, r + o.size / 2);
+      if (!pieces) continue;
+      replaced.push([
+        id,
+        pieces.map((piece) => {
+          // Pieces are stored in world space, which also settles any rotation the stroke had.
+          const world = piece.flatMap((_, i) => {
+            if (i % 2) return [];
+            const w = localToWorld(o, { x: piece[i]!, y: piece[i + 1]! });
+            return [w.x, w.y];
+          });
+          return { ...makePen(world, o.z, o.stroke, o.size, o.opacity), groupId: o.groupId };
+        }),
+      ]);
+    }
+    if (!replaced.length) return;
+    this.board.transact(() => {
+      for (const [id, pieces] of replaced) {
+        objects.delete(id);
+        for (const piece of pieces) insertObject(objects, piece);
+      }
+    });
+    const gone = new Set(replaced.map(([id]) => id));
+    const u = ui();
+    if (u.selectedIds.some((id) => gone.has(id))) u.select(u.selectedIds.filter((id) => !gone.has(id)));
+  }
+
+  /** Select what the loop encircles: an object's center has to be inside, or for a frame, all of it. */
+  private selectInLasso(points: number[]) {
+    if (points.length < 6) return;
+    const { store } = this.board;
+    const xs = points.filter((_, i) => i % 2 === 0);
+    const ys = points.filter((_, i) => i % 2 === 1);
+    const area = rectFromPoints(
+      { x: Math.min(...xs), y: Math.min(...ys) },
+      { x: Math.max(...xs), y: Math.max(...ys) },
+    );
+    const ids = store.query(area).filter((id) => {
+      const b = store.getBounds(id);
+      if (!b) return false;
+      if (store.get(id)?.type === 'frame') {
+        return [b.x, b.x + b.w].every((x) => [b.y, b.y + b.h].every((y) => pointInPolygon({ x, y }, points)));
+      }
+      return pointInPolygon({ x: b.x + b.w / 2, y: b.y + b.h / 2 }, points);
+    });
+    const u = ui();
+    u.select(expandGroups(store, ids));
+    if (ids.length) u.setTool('select');
   }
 
   onDoubleClick = (e: MouseEvent) => {

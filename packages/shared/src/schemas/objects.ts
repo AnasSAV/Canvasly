@@ -25,25 +25,62 @@ const Box = Base.extend({
 
 export const FONT_IDS = [
   'sans',
-  'inter',
-  'poppins',
-  'merriweather',
-  'playfair',
-  'mono',
-  'caveat',
-  'marker',
+  'abril',
+  'arial',
+  'bangers',
   'bebas',
+  'caveat',
+  'courier',
+  'fredoka',
+  'garamond',
+  'georgia',
+  'graduate',
+  'gravitas',
+  'inter',
+  'lato',
+  'merriweather',
+  'mono',
+  'montserrat',
+  'noto',
+  'opensans',
+  'oswald',
+  'marker',
+  'playfair',
+  'plexmono',
+  'plexsans',
+  'plexserif',
+  'poppins',
+  'roboto',
+  'times',
 ] as const;
 export type FontId = (typeof FONT_IDS)[number];
 
 /** Objects from before fonts existed, or using a font this client doesn't know, fall back to the default. */
 const Font = z.enum(FONT_IDS).default('sans').catch('sans');
 
+/** Links come from other people's edits and get opened, so anything that could run script is dropped. */
+export function isSafeLink(url: string): boolean {
+  return /^(https?:\/\/|mailto:)\S+$/i.test(url);
+}
+
+const Align = z.enum(['left', 'center', 'right']);
+
+/** Formatting applies to an object's whole text. */
+const TextStyle = {
+  font: Font,
+  bold: z.boolean().default(false),
+  italic: z.boolean().default(false),
+  underline: z.boolean().default(false),
+  strike: z.boolean().default(false),
+  link: z.string().max(2000).refine(isSafeLink).nullable().default(null).catch(null),
+};
+
 export const StickyObject = Box.extend({
   type: z.literal('sticky'),
   color: Color,
   text: z.string().default(''),
-  font: Font,
+  align: Align.default('center'),
+  ...TextStyle,
 });
 
 export const TextObject = Box.extend({
@@ -51,8 +88,12 @@ export const TextObject = Box.extend({
   text: z.string().default(''),
   fontSize: z.number().positive(),
   color: Color,
-  align: z.enum(['left', 'center', 'right']).default('left'),
-  font: Font,
+  align: Align.default('left'),
+  /** Marker color behind the lines of text. */
+  highlight: Color.default('transparent'),
+  /** Fill behind the whole text box. */
+  background: Color.default('transparent'),
+  ...TextStyle,
   /** The box hugs the text and never wraps; dragging a side handle fixes the width. Older text is fixed. */
   autoWidth: z.boolean().default(false),
 });
@@ -85,7 +126,8 @@ const ShapeFields = {
   strokeWidth: z.number().min(0),
   text: z.string().default(''),
   textColor: Color,
-  font: Font,
+  align: Align.default('center'),
+  ...TextStyle,
 };
 
 export const ShapeObject = Box.extend({ type: z.enum(SHAPE_KINDS), ...ShapeFields });

@@ -110,8 +110,15 @@ touch support.
   (bar, line, area, pie, donut) are edited in a side panel. Both draw through
   [`widgets.ts`](apps/web/src/canvas/widgets.ts), shared by the canvas and exports.
 - **Text and fonts:** new text hugs its content and grows as you type; dragging a side handle fixes the
-  width so it wraps. Text, stickies and shapes can use any of nine fonts, self-hosted through `@fontsource`
-  (Latin only; other scripts fall back to system fonts).
+  width so it wraps. Text, stickies and shapes can use any of 28 fonts, self-hosted through `@fontsource`
+  (Latin only; other scripts fall back to system fonts), and take bold, italic, underline, strikethrough,
+  alignment, lists and a link. Text also has a size, color, highlight and background. Formatting applies to
+  the object's whole text, and lists are ordinary characters in it. Links only accept http, https and
+  mailto, and open with Ctrl/⌘ + click.
+- **Drawing:** pen and highlighter with three remembered presets and any custom color; smart drawing, which
+  turns a sketch into a line, rectangle, ellipse, triangle or diamond with local rules
+  ([`strokes.ts`](packages/shared/src/geometry/strokes.ts)) and leaves anything else as ink; an eraser that
+  cuts strokes where it touches them; a stroke eraser that removes them whole; and a lasso.
 - **Navigation:** the mouse wheel zooms by default; **Preferences → Mouse or trackpad** switches to trackpad
   mode, where scrolling pans and pinch zooms. Right-drag pans, and a right-click without moving opens the
   board or object menu. View preferences are per browser (`localStorage`); the start view is stored on the
@@ -287,7 +294,7 @@ packages/shared   Zod schemas, permissions, wire protocol, geometry, Yjs documen
 | N / T                           | Sticky note / Text                          |
 | R / O                           | Rectangle / Ellipse                         |
 | L / A                           | Line / Arrow (connector)                    |
-| P / E                           | Pen / Eraser (pen strokes)                  |
+| P / E                           | Pen / Stroke eraser                         |
 | I                               | Upload image                                |
 | F / C                           | Frame / Comment                             |
 | Space + drag, middle/right drag | Pan                                         |

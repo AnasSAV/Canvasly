@@ -18,7 +18,13 @@ export type Tool =
   | 'arrow'
   | 'pen'
   | 'highlighter'
+  /** A pen whose strokes turn into clean shapes when they're recognized. */
+  | 'smartpen'
+  /** Removes only the part of a stroke it touches; 'eraser' removes whole strokes. */
+  | 'spoteraser'
   | 'eraser'
+  /** Draw a loop around objects to select them. */
+  | 'lasso'
   | 'frame'
   | 'comment'
   /** Drag out the area the board should open on. */
@@ -39,7 +45,8 @@ export type Draft =
   | { kind: 'shape'; shape: ShapeKind | 'frame' | 'startview'; rect: Rect }
   | { kind: 'pen'; points: number[]; color: string; size: number; opacity: number }
   | { kind: 'connector'; start: ConnectorEnd; end: ConnectorEnd; arrow: boolean }
-  | { kind: 'eraser'; x: number; y: number; r: number };
+  | { kind: 'eraser'; x: number; y: number; r: number }
+  | { kind: 'lasso'; points: number[] };
 
 interface UIState {
   tool: Tool;
@@ -78,9 +85,6 @@ interface UIState {
   /** Awareness client id whose viewport we mirror ("follow user"), or null. */
   followingClientId: number | null;
   stickyColor: string;
-  penColor: string;
-  penSize: number;
-  highlightColor: string;
 
   setTool: (tool: Tool) => void;
   select: (ids: string[]) => void;
@@ -106,9 +110,6 @@ interface UIState {
   toggleFramesPanel: () => void;
   setPresenting: (i: number | null) => void;
   setStickyColor: (c: string) => void;
-  setPenColor: (c: string) => void;
-  setPenSize: (s: number) => void;
-  setHighlightColor: (c: string) => void;
 }
 
 const sameIds = (a: string[], b: string[]) => a.length === b.length && a.every((id, i) => id === b[i]);
@@ -140,9 +141,6 @@ export const useUI = create<UIState>()((set, get) => ({
   framesPanel: false,
   presenting: null,
   stickyColor: STICKY_COLORS[0],
-  penColor: '#1a1a1a',
-  penSize: 4,
-  highlightColor: '#f5d128',
 
   setTool: (tool) => set({ tool, editingId: null, editingCell: null, draft: null }),
   select: (ids) => {
@@ -176,7 +174,4 @@ export const useUI = create<UIState>()((set, get) => ({
   toggleFramesPanel: () => set((s) => ({ framesPanel: !s.framesPanel, commentsPanel: false })),
   setPresenting: (presenting) => set({ presenting, selectedIds: [], editingId: null }),
   setStickyColor: (stickyColor) => set({ stickyColor }),
-  setPenColor: (penColor) => set({ penColor }),
-  setPenSize: (penSize) => set({ penSize }),
-  setHighlightColor: (highlightColor) => set({ highlightColor }),
 }));

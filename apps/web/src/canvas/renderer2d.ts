@@ -5,8 +5,8 @@ import {
   toRad,
   wrapText,
   type BoardObject,
-  type FontId,
   type Rect,
+  type TextBearingObject,
 } from '@canvasly/shared';
 import { assetUrl, getLoadedImage, loadImage } from '../doc/assets';
 import type { DocStore } from '../doc/store';
@@ -19,9 +19,12 @@ import {
   LINE_HEIGHT,
   SHAPE_PADDING,
   STICKY_PADDING,
+  TEXT_BACKGROUND_PADDING,
   autoFontSize,
   ensureFonts,
+  fontStyle,
   measureWith,
+  textLineRects,
 } from './text';
 
 /**
@@ -37,20 +40,29 @@ function drawText(
   text: string,
   box: { x: number; y: number; w: number; h: number },
   size: number,
-  align: 'left' | 'center' | 'right',
+  style: TextBearingObject,
   vCenter: boolean,
-  font: FontId,
   wrap = true,
 ) {
   if (!text) return;
-  ctx.font = `${size}px ${FONTS[font].family}`;
+  const { align } = style;
+  const measure = measureWith(style);
+  ctx.font = `${fontStyle(style)} ${size}px ${FONTS[style.font].family}`;
   ctx.textBaseline = 'top';
-  const lines = wrap ? wrapText(text, box.w, size, measureWith(font)) : text.split('\n');
+  const lines = wrap ? wrapText(text, box.w, size, measure) : text.split('\n');
   const lineH = size * LINE_HEIGHT;
   const top = vCenter ? box.y + (box.h - lines.length * lineH) / 2 : box.y;
   ctx.textAlign = align;
   const x = align === 'center' ? box.x + box.w / 2 : align === 'right' ? box.x + box.w : box.x;
-  lines.forEach((line, i) => ctx.fillText(line, x, top + i * lineH + (lineH - size) / 2));
+  const rule = Math.max(1, size / 15);
+  lines.forEach((line, i) => {
+    const y = top + i * lineH + (lineH - size) / 2;
+    ctx.fillText(line, x, y);
+    const w = measure(line, size);
+    const left = align === 'center' ? x - w / 2 : align === 'right' ? x - w : x;
+    if (style.underline || style.link) ctx.fillRect(left, y + size * 0.95, w, rule);
+    if (style.strike) ctx.fillRect(left, y + size * 0.5, w, rule);
+  });
 }
 
 function arrowHead(
@@ -121,17 +133,28 @@ function drawObject(ctx: CanvasRenderingContext2D, o: BoardObject, store: DocSto
         ctx,
         o.text,
         { x: p, y: p, w: o.w - p * 2, h: o.h - p * 2 },
-        autoFontSize(o.text, o.w, o.h, p, o.font),
-        'center',
+        autoFontSize(o.text, o.w, o.h, p, o),
+        o,
         true,
-        o.font,
       );
       break;
     }
-    case 'text':
+    case 'text': {
+      if (o.background !== 'transparent') {
+        const pad = TEXT_BACKGROUND_PADDING;
+        ctx.fillStyle = o.background;
+        ctx.beginPath();
+        ctx.roundRect(-pad, -pad, o.w + pad * 2, o.h + pad * 2, 3);
+        ctx.fill();
+      }
+      if (o.highlight !== 'transparent') {
+        ctx.fillStyle = o.highlight;
+        for (const r of textLineRects(o)) if (!r.empty) ctx.fillRect(r.x, r.y, r.w, r.h);
+      }
       ctx.fillStyle = o.color;
-      drawText(ctx, o.text, { x: 0, y: 0, w: o.w, h: o.h }, o.fontSize, o.align, false, o.font, !o.autoWidth);
+      drawText(ctx, o.text, { x: 0, y: 0, w: o.w, h: o.h }, o.fontSize, o, false, !o.autoWidth);
       break;
+    }
     case 'pen':
       ctx.fillStyle = o.stroke;
       ctx.globalAlpha = o.opacity;
@@ -168,8 +191,8 @@ function drawObject(ctx: CanvasRenderingContext2D, o: BoardObject, store: DocSto
       }
       ctx.fillStyle = o.textColor;
       const box = shapeTextBox(o.type, o.w, o.h, SHAPE_PADDING);
-      const size = Math.min(autoFontSize(o.text, box.w, box.h, 0, o.font), 28);
-      drawText(ctx, o.text, box, size, 'center', true, o.font);
+      const size = Math.min(autoFontSize(o.text, box.w, box.h, 0, o), 28);
+      drawText(ctx, o.text, box, size, o, true);
     }
   }
   ctx.restore();
