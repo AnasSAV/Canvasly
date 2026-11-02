@@ -62,6 +62,7 @@ const STROKE_ERASER_RADIUS = 8; // screen px
 const SPOT_ERASER_RADIUS = 12; // screen px
 const SMART_MIN_SIZE = 24; // screen px; anything smaller stays as ink
 const DOT_ATTACH_REACH = 24; // screen px; a line from a dot attaches when it's let go near a shape
+const LINE_HANDLE_REACH = 12; // screen px
 const BEND_SNAP = 8; // screen px; a line dragged back to about straight goes properly straight
 
 type Gesture =
@@ -208,6 +209,18 @@ export class Interactions {
     return { kind: 'point', x: s.x, y: s.y };
   }
 
+  /**
+   * The selected line whose middle handle is at p. Worked out from the line itself, as Konva's hit canvas only catches
+   * up on the next frame, and until then a click on a handle that just moved would land on the line instead.
+   */
+  private lineHandleAt(p: Vec): string | null {
+    const ids = ui().selectedIds;
+    const line = ids.length === 1 ? this.board.store.get(ids[0]!) : undefined;
+    if (line?.type !== 'connector' || line.locked) return null;
+    const r = this.board.store.resolve(line);
+    return r && dist(r.mid, p) * vp().camera.zoom <= LINE_HANDLE_REACH ? line.id : null;
+  }
+
   /** A second finger landed mid-gesture: drop whatever the first finger started. */
   private cancelGesture() {
     const g = this.g;
@@ -320,13 +333,15 @@ export class Interactions {
         this.el.setPointerCapture(e.pointerId);
         return;
       }
-      const mid = node.getAttr('connectorMid') as string | undefined;
-      if (mid && e.button === 0 && !this.board.readOnly) {
+      if (node.getParent() instanceof Konva.Transformer) return;
+    }
+    if (e.button === 0 && !this.board.readOnly && u.tool === 'select') {
+      const mid = this.lineHandleAt(p);
+      if (mid) {
         this.g = { kind: 'bend', id: mid, started: false, startScreen: screen };
         this.el.setPointerCapture(e.pointerId);
         return;
       }
-      if (node.getParent() instanceof Konva.Transformer) return;
     }
     // Keep focus/text selection where they are (and avoid middle-click autoscroll). Transformer anchors
     // above still need the native mousedown, which this would suppress.
@@ -868,13 +883,13 @@ export class Interactions {
   onDoubleClick = (e: MouseEvent) => {
     if (isEditableTarget(e)) return;
     // Double-clicking a line's middle handle straightens it again.
-    const mid = this.getStage()?.getIntersection(this.screen(e))?.getAttr('connectorMid') as
-      string | undefined;
+    const p = this.world(e);
+    const mid = ui().tool === 'select' ? this.lineHandleAt(p) : null;
     if (mid) {
       if (!this.board.readOnly) patch(this.board, mid, { bend: null });
       return;
     }
-    this.editAt(this.world(e));
+    this.editAt(p);
   };
 
   onWheel = (e: WheelEvent) => {

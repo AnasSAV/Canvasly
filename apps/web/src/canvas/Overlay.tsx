@@ -251,8 +251,7 @@ function ConnectorSelection({ zoom }: { zoom: number }) {
               fill={ACCENT}
               stroke="#fff"
               strokeWidth={1.5 / zoom}
-              hitStrokeWidth={14 / zoom}
-              connectorMid={c.id}
+              listening={false}
             />
           );
         })()}

@@ -15,6 +15,10 @@ const selection = (page: Page) =>
     return mod.useUI.getState().selectedIds;
   }, '/src/state/ui.ts');
 
+/** Connect dots and the rotate handle are canvas widgets, which can be clicked once they've been drawn. */
+const drawn = (page: Page) =>
+  page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+
 /** A selected rectangle, 160 by 100, centered on the point. */
 async function addRect(page: Page, x: number, y: number) {
   await page.keyboard.press('r');
@@ -37,6 +41,7 @@ test('dragging from a dot draws a curved arrow, meeting the other shape squarely
   await addRect(page, 400, 250);
   const [target, source] = (await ofType(page, 'rect')).sort((a, b) => b.x - a.x);
 
+  await drawn(page);
   await page.mouse.move(...rightDot(400, 250));
   await page.mouse.down();
   await page.mouse.move(700, 400, { steps: 4 });
@@ -72,6 +77,7 @@ test('dragging from a dot draws a curved arrow, meeting the other shape squarely
 
 test('dragging from a dot to empty space leaves a free end there', async ({ page }) => {
   await addRect(page, 400, 300);
+  await drawn(page);
   await page.mouse.move(...bottomDot(400, 300));
   await page.mouse.down();
   await page.mouse.move(600, 700, { steps: 5 });
@@ -90,6 +96,7 @@ test('clicking a dot adds a joined copy on that side, as one undo step', async (
   await expect.poll(async () => (await ofType(page, 'rect'))[0]!.cornerRadius).not.toBeNull();
   await page.getByTestId('corner-radius').click();
 
+  await drawn(page);
   await page.mouse.click(...rightDot(500, 400));
   await expect.poll(async () => (await ofType(page, 'rect')).length).toBe(2);
   const copy = (await ofType(page, 'rect')).find((o) => o.id !== original.id)!;
@@ -109,6 +116,7 @@ test('clicking a dot adds a joined copy on that side, as one undo step', async (
 
   // Back to the left, and a line from an object that can't be copied just doesn't add anything.
   await page.mouse.click(500, 400);
+  await drawn(page);
   await page.mouse.click(...leftDot(500, 400));
   await expect.poll(async () => (await ofType(page, 'rect')).length).toBe(2);
   const left = (await ofType(page, 'rect')).find((o) => o.id !== original.id)!;
@@ -121,6 +129,7 @@ test('dots only show when they can be used', async ({ page }) => {
 
   // Locked: a click where the dot would be just deselects.
   await page.keyboard.press('Control+Shift+l');
+  await drawn(page);
   await page.mouse.click(...rightDot(500, 400));
   await page.waitForTimeout(150);
   expect(await count()).toBe(1);
@@ -132,6 +141,7 @@ test('dots only show when they can be used', async ({ page }) => {
   // With two selected there's no single object to connect from.
   await addRect(page, 900, 400);
   await page.keyboard.press('Control+a');
+  await drawn(page);
   await page.mouse.click(...rightDot(900, 400));
   await page.waitForTimeout(150);
   expect(await count()).toBe(2);
@@ -141,6 +151,7 @@ test('letting go near a shape attaches, without having to land exactly on it', a
   await addRect(page, 900, 500);
   await page.mouse.click(1300, 860);
   await addRect(page, 400, 250);
+  await drawn(page);
   await page.mouse.move(...rightDot(400, 250));
   await page.mouse.down();
   // 15px short of the target's left edge at x=820.
@@ -152,6 +163,7 @@ test('letting go near a shape attaches, without having to land exactly on it', a
   // Well clear of it, the end stays free.
   await page.mouse.click(1300, 860);
   await page.mouse.click(400, 250);
+  await drawn(page);
   await page.mouse.move(...bottomDot(400, 250));
   await page.mouse.down();
   await page.mouse.move(700, 500, { steps: 6 });
@@ -166,6 +178,7 @@ test('letting go near a shape attaches, without having to land exactly on it', a
 test('the rotate handle moved off the bottom corner, and still rotates', async ({ page }) => {
   await addRect(page, 600, 400);
   // From the center, along the diagonal to past the bottom edge: (-70, +70) for this size of shape.
+  await drawn(page);
   await page.mouse.move(530, 470);
   await page.mouse.down();
   await page.mouse.move(500, 300, { steps: 6 });
@@ -177,6 +190,7 @@ test('the rotate handle moved off the bottom corner, and still rotates', async (
   await page.keyboard.press('Control+z');
   await expect.poll(async () => (await ofType(page, 'rect'))[0]!.rotation).toBe(0);
   expect(before).not.toBe(0);
+  await drawn(page);
   await page.mouse.move(600, 400 - 50 - 22);
   await page.mouse.down();
   await page.mouse.move(600, 150, { steps: 5 });

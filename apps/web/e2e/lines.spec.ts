@@ -110,6 +110,29 @@ test('the middle handle bends a line, follows its ends, and double-click straigh
   expect((await line(page)).bend).toBeNull();
 });
 
+test('the middle handle answers right away, even before the next frame is drawn', async ({ page }) => {
+  await drawArrow(page);
+  await page.mouse.move(650, 450);
+  await page.mouse.down();
+  await page.mouse.move(650, 250, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(async () => (await line(page)).bend).not.toBeNull();
+  await page.keyboard.press('Control+z');
+  await expect.poll(async () => (await line(page)).bend).toBeNull();
+  await page.waitForTimeout(100);
+
+  // Frames arrive late, as on a software-rendered browser, so the canvas still shows the handle's old position.
+  await page.evaluate(() => {
+    const raf = window.requestAnimationFrame.bind(window);
+    window.requestAnimationFrame = (cb) => window.setTimeout(() => raf(cb), 300) as unknown as number;
+  });
+  await page.keyboard.press('Control+Shift+z');
+  await expect.poll(async () => (await line(page)).bend).not.toBeNull();
+  await page.mouse.dblclick(650, 250);
+  await expect.poll(async () => (await line(page)).bend).toBeNull();
+  await expect(page.getByTestId('line-label-input')).toHaveCount(0);
+});
+
 test('text on a line: from the toolbar, by double-click, and it undoes', async ({ page }) => {
   await drawArrow(page);
   await page.getByTestId('line-label').click();
