@@ -22,6 +22,7 @@ import { CommentsLayer, CommentsPanel } from './ui/Comments';
 import { ContextMenu } from './ui/ContextMenu';
 import { FramesPanel, Presentation } from './ui/Frames';
 import { FollowBanner, RemoteCursors } from './ui/Presence';
+import { LayersPanel } from './ui/Layers';
 import { ObjectSizeTag, SelectionToolbar } from './ui/SelectionToolbar';
 import { ShareDialog } from './ui/ShareDialog';
 import { ShortcutsDialog } from './ui/ShortcutsDialog';
@@ -364,6 +365,7 @@ function BoardView({
           <Minimap />
           <CommentsPanel />
           <FramesPanel />
+          <LayersPanel />
           <ChartEditor />
           <ContextMenu actions={actions} title={meta.title} />
           <ShortcutsDialog />

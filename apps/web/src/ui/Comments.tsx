@@ -91,7 +91,7 @@ function Popover({
   const width = useViewport((s) => s.width);
   const height = useViewport((s) => s.height);
   // Keep clear of an open side panel (comments/frames list) on the right.
-  const sidePanel = useUI((s) => s.commentsPanel || s.framesPanel);
+  const sidePanel = useUI((s) => s.commentsPanel || s.framesPanel || s.layersPanel);
   const left = Math.min(Math.max(8, at.x + 18), Math.max(8, width - 328 - (sidePanel ? 300 : 0)));
   const top = Math.min(Math.max(8, at.y - 20), Math.max(8, height - 360));
   return (

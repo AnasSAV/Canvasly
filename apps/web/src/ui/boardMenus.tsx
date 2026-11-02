@@ -389,6 +389,7 @@ export function boardMenuEntries(
     'divider',
     { label: 'Comments panel', onSelect: () => ui().toggleCommentsPanel() },
     { label: 'Frames panel', onSelect: () => ui().toggleFramesPanel() },
+    { label: 'Layers panel', onSelect: () => ui().toggleLayersPanel() },
   ];
 
   const preferenceItems: MenuEntry[] = [

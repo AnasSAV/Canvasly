@@ -109,6 +109,9 @@ touch support.
   cells merge; adding or removing rows and columns is last-write-wins under concurrent edits. Charts
   (bar, line, area, pie, donut) are edited in a side panel. Both draw through
   [`widgets.ts`](apps/web/src/canvas/widgets.ts), shared by the canvas and exports.
+- **Layers:** a tab on the right edge opens a list of everything on the board, top first, with groups as
+  folders that collapse. Rows select, double-clicking zooms to an object or renames a group, and hovering
+  outlines the object. Group names live in the document's meta map, so they sync.
 - **Text and fonts:** new text hugs its content and grows as you type; dragging a side handle fixes the
   width so it wraps. Text, stickies and shapes can use any of 28 fonts, self-hosted through `@fontsource`
   (Latin only; other scripts fall back to system fonts), and take bold, italic, underline, strikethrough,

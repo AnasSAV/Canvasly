@@ -80,6 +80,9 @@ interface UIState {
   commentsPanel: boolean;
   showResolved: boolean;
   framesPanel: boolean;
+  layersPanel: boolean;
+  /** Objects outlined on the canvas while their row in the layers panel is hovered. */
+  layerHover: string[];
   /** Index into the frames list while presenting, or null. */
   presenting: number | null;
   /** Awareness client id whose viewport we mirror ("follow user"), or null. */
@@ -108,6 +111,8 @@ interface UIState {
   toggleCommentsPanel: () => void;
   setShowResolved: (v: boolean) => void;
   toggleFramesPanel: () => void;
+  toggleLayersPanel: () => void;
+  setLayerHover: (ids: string[]) => void;
   setPresenting: (i: number | null) => void;
   setStickyColor: (c: string) => void;
 }
@@ -139,6 +144,8 @@ export const useUI = create<UIState>()((set, get) => ({
   commentsPanel: false,
   showResolved: false,
   framesPanel: false,
+  layersPanel: false,
+  layerHover: [],
   presenting: null,
   stickyColor: STICKY_COLORS[0],
 
@@ -169,9 +176,16 @@ export const useUI = create<UIState>()((set, get) => ({
     set(readOnly ? { readOnly, editingId: null, tool: 'select', draft: null } : { readOnly }),
   setCommentDraft: (commentDraft) => set({ commentDraft, openThreadId: null }),
   setOpenThread: (openThreadId) => set({ openThreadId, commentDraft: null }),
-  toggleCommentsPanel: () => set((s) => ({ commentsPanel: !s.commentsPanel, framesPanel: false })),
+  toggleCommentsPanel: () =>
+    set((s) => ({ commentsPanel: !s.commentsPanel, framesPanel: false, layersPanel: false })),
   setShowResolved: (showResolved) => set({ showResolved }),
-  toggleFramesPanel: () => set((s) => ({ framesPanel: !s.framesPanel, commentsPanel: false })),
+  toggleFramesPanel: () =>
+    set((s) => ({ framesPanel: !s.framesPanel, commentsPanel: false, layersPanel: false })),
+  toggleLayersPanel: () =>
+    set((s) => ({ layersPanel: !s.layersPanel, commentsPanel: false, framesPanel: false, layerHover: [] })),
+  setLayerHover: (ids) => {
+    if (ids.length || get().layerHover.length) set({ layerHover: ids });
+  },
   setPresenting: (presenting) => set({ presenting, selectedIds: [], editingId: null }),
   setStickyColor: (stickyColor) => set({ stickyColor }),
 }));

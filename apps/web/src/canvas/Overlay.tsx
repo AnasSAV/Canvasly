@@ -353,6 +353,33 @@ function Draft({ zoom }: { zoom: number }) {
   }
 }
 
+/** Outline what's under the pointer in the layers panel, so that a row can be matched to its object. */
+function LayerHover({ zoom }: { zoom: number }) {
+  const board = useBoard();
+  const ids = useUI((s) => s.layerHover);
+  return (
+    <>
+      {ids.map((id) => {
+        const o = board.store.get(id);
+        if (!o) return null;
+        const points =
+          o.type === 'connector' ? board.store.resolve(o)?.points : corners(o).flatMap((c) => [c.x, c.y]);
+        if (!points) return null;
+        return (
+          <Line
+            key={id}
+            points={points}
+            closed={o.type !== 'connector'}
+            stroke={ACCENT}
+            strokeWidth={1.5 / zoom}
+            listening={false}
+          />
+        );
+      })}
+    </>
+  );
+}
+
 /** Outline what other people have selected, in their color. */
 function RemoteSelections({ zoom }: { zoom: number }) {
   const board = useBoard();
@@ -407,6 +434,7 @@ export function OverlayLayer({ stage }: { stage: Konva.Stage | null }) {
       <ConnectorSelection zoom={zoom} />
       <SelectionTransformer stage={stage} />
       <AttachHighlight zoom={zoom} />
+      <LayerHover zoom={zoom} />
       <Draft zoom={zoom} />
       {guides.map((g, i) => (
         <Line
