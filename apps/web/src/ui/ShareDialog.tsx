@@ -27,7 +27,8 @@ export function ShareDialog({ boardId, onClose }: { boardId: string; onClose: ()
   useEffect(() => {
     api
       .getShare(boardId)
-      .then(setSettings)
+      // Anything changed here while this was loading is newer than what it returns.
+      .then((loaded) => setSettings((current) => current ?? loaded))
       .catch((e: Error) => setMessage({ kind: 'error', text: e.message }));
   }, [boardId]);
 

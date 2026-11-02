@@ -25,7 +25,16 @@ export const BoardSummary = z.object({
 });
 export type BoardSummary = z.infer<typeof BoardSummary>;
 
-export const BoardList = z.object({ boards: z.array(BoardSummary) });
+/** What the home page shows about a board, beyond what opening it needs. */
+export const BoardListItem = BoardSummary.extend({
+  /** Everyone with access, the owner included. */
+  memberCount: z.number(),
+  /** The board's link setting. Only sent to its owner. */
+  linkRole: z.enum(['viewer', 'editor']).nullable(),
+});
+export type BoardListItem = z.infer<typeof BoardListItem>;
+
+export const BoardList = z.object({ boards: z.array(BoardListItem) });
 export type BoardList = z.infer<typeof BoardList>;
 
 export const AssetCreated = z.object({ id: z.string() });

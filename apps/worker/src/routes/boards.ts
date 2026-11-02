@@ -9,6 +9,7 @@ import {
   can,
   newId,
   type BoardList,
+  type BoardListItem,
   type BoardSummary,
 } from '@canvasly/shared';
 import { Hono } from 'hono';
@@ -24,7 +25,9 @@ export const boards = new Hono<AppEnv>();
 boards.get('/', async (c) => {
   const { results } = await c.env.DB.prepare(
     `SELECT b.id, b.title, m.role, u.name AS ownerName, b.created_at AS createdAt, b.updated_at AS updatedAt,
-            t.updated_at AS thumbnailVersion
+            t.updated_at AS thumbnailVersion,
+            (SELECT COUNT(*) FROM board_members o WHERE o.board_id = b.id) AS memberCount,
+            CASE WHEN m.role = 'owner' THEN b.link_role END AS linkRole
        FROM board_members m
        JOIN boards b ON b.id = m.board_id
        JOIN "user" u ON u.id = b.owner_id
@@ -34,7 +37,7 @@ boards.get('/', async (c) => {
       LIMIT 500`,
   )
     .bind(c.get('user').id)
-    .all<BoardSummary>();
+    .all<BoardListItem>();
   return c.json({ boards: results } satisfies BoardList);
 });
 

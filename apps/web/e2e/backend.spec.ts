@@ -27,7 +27,7 @@ test('dashboard: create, open, rename and delete a board', async ({ page }) => {
   await expect(page).toHaveURL(/\/$/);
   const card = page.getByTestId('board-card');
   await expect(card).toHaveCount(1);
-  await expect(page.getByText('Roadmap')).toBeVisible();
+  await expect(page.getByTestId('board-item').getByText('Roadmap')).toBeVisible();
   await expect(card.locator('img')).toBeVisible();
 
   page.once('dialog', (d) => void d.accept());
