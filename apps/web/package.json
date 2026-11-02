@@ -1,14 +1,27 @@
 {
   "name": "@canvasly/web",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
+  "description": "Canvasly web app: React, react-konva canvas and Yjs client",
+  "license": "MIT",
+  "author": "Anas Hussaindeen",
+  "homepage": "https://canvasly.anas-hussaindeen.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AnasSAV/Canvasly.git",
+    "directory": "apps/web"
+  },
+  "bugs": {
+    "url": "https://github.com/AnasSAV/Canvasly/issues"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json && tsc -p e2e/tsconfig.json",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "screenshots": "playwright test --config playwright.screenshots.config.ts"
   },
   "dependencies": {
     "@canvasly/shared": "workspace:*",

@@ -5,3 +5,4 @@ pnpm-lock.yaml
 playwright-report
 test-results
 worker-configuration.d.ts
+packages/shared/release

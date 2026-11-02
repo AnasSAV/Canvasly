@@ -1,7 +1,19 @@
 {
   "name": "@canvasly/worker",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
+  "description": "Canvasly API: Cloudflare Worker, Better Auth and the BoardRoom Durable Object",
+  "license": "MIT",
+  "author": "Anas Hussaindeen",
+  "homepage": "https://canvasly.anas-hussaindeen.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AnasSAV/Canvasly.git",
+    "directory": "apps/worker"
+  },
+  "bugs": {
+    "url": "https://github.com/AnasSAV/Canvasly/issues"
+  },
   "type": "module",
   "scripts": {
     "predev": "node scripts/predev.mjs && pnpm db:migrate:local",

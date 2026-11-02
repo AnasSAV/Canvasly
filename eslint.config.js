@@ -5,7 +5,15 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/.wrangler/**', '**/node_modules/**', '**/playwright-report/**'] },
+  {
+    ignores: [
+      '**/dist/**',
+      'packages/shared/release/**',
+      '**/.wrangler/**',
+      '**/node_modules/**',
+      '**/playwright-report/**',
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.strict,
   {

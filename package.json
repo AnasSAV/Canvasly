@@ -1,6 +1,18 @@
 {
   "name": "canvasly",
+  "version": "1.0.0",
   "private": true,
+  "description": "Real-time collaborative whiteboard that runs entirely on Cloudflare Workers Free",
+  "license": "MIT",
+  "author": "Anas Hussaindeen",
+  "homepage": "https://canvasly.anas-hussaindeen.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AnasSAV/Canvasly.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AnasSAV/Canvasly/issues"
+  },
   "type": "module",
   "packageManager": "pnpm@12.16.1",
   "engines": {

@@ -1,14 +1,37 @@
 {
   "name": "@canvasly/shared",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
+  "description": "Schemas, geometry, Yjs helpers, permissions and templates for Canvasly, a real-time collaborative whiteboard",
+  "license": "MIT",
+  "author": "Anas Hussaindeen",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AnasSAV/Canvasly.git",
+    "directory": "packages/shared"
+  },
+  "homepage": "https://github.com/AnasSAV/Canvasly/tree/main/packages/shared#readme",
+  "bugs": {
+    "url": "https://github.com/AnasSAV/Canvasly/issues"
+  },
+  "keywords": [
+    "whiteboard",
+    "crdt",
+    "yjs",
+    "collaboration",
+    "canvas",
+    "geometry",
+    "zod"
+  ],
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build": "tsup src/index.ts --format esm --dts --clean --out-dir dist",
+    "prepare-publish": "node scripts/prepare-publish.mjs"
   },
   "dependencies": {
     "fractional-indexing": "^4.0.0",
@@ -19,6 +42,7 @@
     "yjs": "^13.6.0"
   },
   "devDependencies": {
+    "tsup": "^9.0.0",
     "yjs": "^13.6.33"
   }
 }

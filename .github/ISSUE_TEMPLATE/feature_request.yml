@@ -1,0 +1,23 @@
+name: Feature request
+description: Suggest something Canvasly could do
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The task or problem, rather than the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help?
+      description: How you imagine it working. Screenshots from other tools are welcome.
+  - type: checkboxes
+    id: free
+    attributes:
+      label: Hosting
+      description: Canvasly runs entirely on free plans, so ideas that need paid services are unlikely to fit.
+      options:
+        - label: As far as I can tell, this wouldn't need a paid service

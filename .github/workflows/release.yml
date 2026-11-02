@@ -1,0 +1,47 @@
+name: Release
+
+# Publishing a GitHub Release publishes the shared library to GitHub Packages, at the version in the release's tag,
+# and attaches the package to the release.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: https://npm.pkg.github.com
+          scope: '@anassav'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - name: Build the package
+        working-directory: packages/shared
+        run: |
+          pnpm build
+          node scripts/prepare-publish.mjs "$TAG"
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+      - name: Publish to GitHub Packages
+        working-directory: packages/shared/release
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Attach the package to the release
+        working-directory: packages/shared/release
+        run: |
+          npm pack --silent
+          gh release upload "$TAG" ./*.tgz
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
