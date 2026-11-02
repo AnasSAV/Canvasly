@@ -185,7 +185,7 @@ function drawObject(ctx: CanvasRenderingContext2D, o: BoardObject, store: DocSto
     default: {
       if (!isShapeObject(o)) break;
       ctx.beginPath();
-      traceShape(ctx, o.type, o.w, o.h);
+      traceShape(ctx, o.type, o.w, o.h, o.cornerRadius);
       if (o.fill !== 'transparent') {
         ctx.fillStyle = o.fill;
         ctx.fill();

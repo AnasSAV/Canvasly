@@ -1,4 +1,5 @@
 import {
+  closestSideAnchor,
   dist,
   eraseFromStroke,
   expandRect,
@@ -36,6 +37,7 @@ import {
 import Konva from 'konva';
 import type { Board } from '../doc/board';
 import {
+  addConnectedCopy,
   addObjects,
   deleteObjects,
   expandGroups,
@@ -59,6 +61,7 @@ const SNAP_DISTANCE = 6; // screen px
 const STROKE_ERASER_RADIUS = 8; // screen px
 const SPOT_ERASER_RADIUS = 12; // screen px
 const SMART_MIN_SIZE = 24; // screen px; anything smaller stays as ink
+const DOT_ATTACH_REACH = 24; // screen px; a line from a dot attaches when it's let go near a shape
 const BEND_SNAP = 8; // screen px; a line dragged back to about straight goes properly straight
 
 type Gesture =
@@ -80,7 +83,14 @@ type Gesture =
   | { kind: 'shape'; shape: ShapeKind | 'frame' | 'startview'; start: Vec }
   | { kind: 'pen'; points: number[]; color: string; size: number; opacity: number; smart: boolean }
   | { kind: 'lasso'; points: number[] }
-  | { kind: 'connector'; start: ConnectorEnd; startScreen: Vec; arrow: boolean }
+  | {
+      kind: 'connector';
+      start: ConnectorEnd;
+      startScreen: Vec;
+      arrow: boolean;
+      /** Started from a connect dot: curved, meets shapes squarely, and a click adds a joined copy. */
+      fromDot?: { id: string; side: readonly [number, number] };
+    }
   | { kind: 'reattach'; id: string; which: 'start' | 'end'; started: boolean; startScreen: Vec }
   | { kind: 'bend'; id: string; started: boolean; startScreen: Vec }
   | { kind: 'eraser'; spot: boolean; last: Vec }
@@ -179,17 +189,19 @@ export class Interactions {
   }
 
   /** Connector end at world point p: attached to the shape under the pointer, or a free point. */
-  private endAt(p: Vec, excludeId: string | null): ConnectorEnd {
+  private endAt(p: Vec, excludeId: string | null, squarely = false): ConnectorEnd {
     const zoom = vp().camera.zoom;
     const target = hitTest(
       this.board.store,
       p,
-      0,
+      squarely ? DOT_ATTACH_REACH / zoom : 0,
       (o) => o.type !== 'connector' && o.type !== 'pen' && o.id !== excludeId,
     );
     ui().setAttachHover(target?.id ?? null);
     if (target && target.type !== 'connector') {
-      const anchor = nearestSideAnchor(target, p, 12 / zoom) ?? 'auto';
+      const anchor = squarely
+        ? closestSideAnchor(target, p)
+        : (nearestSideAnchor(target, p, 12 / zoom) ?? 'auto');
       return { kind: 'attached', objectId: target.id, anchor };
     }
     const s = this.snapPoint(p);
@@ -293,6 +305,18 @@ export class Interactions {
       const handle = node.getAttr('connectorHandle') as { id: string; which: 'start' | 'end' } | undefined;
       if (handle && e.button === 0 && !this.board.readOnly) {
         this.g = { kind: 'reattach', ...handle, started: false, startScreen: screen };
+        this.el.setPointerCapture(e.pointerId);
+        return;
+      }
+      const dot = node.getAttr('connectDot') as { id: string; side: [number, number] } | undefined;
+      if (dot && e.button === 0 && !this.board.readOnly) {
+        this.g = {
+          kind: 'connector',
+          start: { kind: 'attached', objectId: dot.id, anchor: dot.side },
+          startScreen: screen,
+          arrow: true,
+          fromDot: dot,
+        };
         this.el.setPointerCapture(e.pointerId);
         return;
       }
@@ -568,8 +592,16 @@ export class Interactions {
         break;
       }
       case 'connector': {
+        // Holding off until it's a real drag, since a click on a connect dot means something else.
+        if (g.fromDot && !u.draft && dist(screen, g.startScreen) < DRAG_THRESHOLD) return;
         const startId = g.start.kind === 'attached' ? g.start.objectId : null;
-        u.setDraft({ kind: 'connector', start: g.start, end: this.endAt(p, startId), arrow: g.arrow });
+        u.setDraft({
+          kind: 'connector',
+          start: g.start,
+          end: this.endAt(p, startId, !!g.fromDot),
+          arrow: g.arrow,
+          curved: !!g.fromDot,
+        });
         break;
       }
       case 'reattach': {
@@ -715,11 +747,19 @@ export class Interactions {
         u.setDraft(null);
         u.setAttachHover(null);
         const p = this.world(e);
-        if (dist(this.screen(e), g.startScreen) < 8) break;
+        if (dist(this.screen(e), g.startScreen) < 8) {
+          const from = g.fromDot && store.get(g.fromDot.id);
+          if (from && g.fromDot && e.type === 'pointerup') {
+            const added = addConnectedCopy(this.board, from, g.fromDot.side);
+            if (added) u.select([added]);
+          }
+          break;
+        }
         const startId = g.start.kind === 'attached' ? g.start.objectId : null;
-        const end = this.endAt(p, startId);
+        const end = this.endAt(p, startId, !!g.fromDot);
         u.setAttachHover(null);
-        this.finishCreate(makeConnector(g.start, end, nextZ(store), { arrow: g.arrow }), false);
+        const line = makeConnector(g.start, end, nextZ(store), { arrow: g.arrow });
+        this.finishCreate(g.fromDot ? { ...line, routing: 'curved' } : line, false);
         break;
       }
       case 'reattach':

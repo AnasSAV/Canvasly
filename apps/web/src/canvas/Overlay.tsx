@@ -3,6 +3,7 @@ import {
   anchorToWorld,
   corners,
   isBoxObject,
+  localToWorld,
   patchObject,
   type BoardObject,
   type ObjectPatch,
@@ -174,6 +175,8 @@ function SelectionTransformer({ stage }: { stage: Konva.Stage | null }) {
       anchorSize={9}
       anchorCornerRadius={2}
       rotateAnchorOffset={ROTATE_ANCHOR_OFFSET}
+      // Off a bottom corner, as the top is where a connect dot goes.
+      rotateAnchorAngle={225}
       padding={2}
       boundBoxFunc={(oldBox, newBox) =>
         Math.abs(newBox.width) < 8 || Math.abs(newBox.height) < 8 ? oldBox : suggestSize(newBox)
@@ -257,6 +260,51 @@ function ConnectorSelection({ zoom }: { zoom: number }) {
   );
 }
 
+/** How far outside the selection the connect dots sit, in screen px. */
+const CONNECT_DOT_OFFSET = 22;
+
+/**
+ * Dots around the one selected object. Dragging from one draws a line out of that side; clicking one adds another
+ * object like this one, joined to it.
+ */
+function ConnectDots({ zoom }: { zoom: number }) {
+  const board = useBoard();
+  useDocVersion(board);
+  const selectedIds = useUI((s) => s.selectedIds);
+  const tool = useUI((s) => s.tool);
+  const interacting = useUI((s) => s.interacting);
+  const readOnly = useUI((s) => s.readOnly);
+  const editing = useUI((s) => s.editingId || s.editingCell || s.editingLabelId);
+  const draft = useUI((s) => s.draft);
+  const o = selectedIds.length === 1 ? board.store.get(selectedIds[0]!) : undefined;
+  if (!o || !isBoxObject(o) || o.type === 'pen' || o.locked) return null;
+  if (tool !== 'select' || interacting || readOnly || editing || draft) return null;
+  const gap = CONNECT_DOT_OFFSET / zoom;
+  return (
+    <>
+      {SIDE_ANCHORS.map((side) => {
+        const p = localToWorld(o, {
+          x: side[0] * o.w + (side[0] - 0.5) * 2 * gap,
+          y: side[1] * o.h + (side[1] - 0.5) * 2 * gap,
+        });
+        return (
+          <Circle
+            key={side.join()}
+            x={p.x}
+            y={p.y}
+            radius={4.5 / zoom}
+            fill={ACCENT}
+            stroke="#fff"
+            strokeWidth={1.5 / zoom}
+            hitStrokeWidth={18 / zoom}
+            connectDot={{ id: o.id, side }}
+          />
+        );
+      })}
+    </>
+  );
+}
+
 /** Outline + side anchors of the shape a connector would attach to. */
 function AttachHighlight({ zoom }: { zoom: number }) {
   const board = useBoard();
@@ -332,7 +380,11 @@ function Draft({ zoom }: { zoom: number }) {
         />
       );
     case 'connector': {
-      const r = board.store.resolve({ start: draft.start, end: draft.end, routing: 'straight' });
+      const r = board.store.resolve({
+        start: draft.start,
+        end: draft.end,
+        routing: draft.curved ? 'curved' : 'straight',
+      });
       if (!r) return null;
       return (
         <ConnectorNode
@@ -457,6 +509,7 @@ export function OverlayLayer({ stage }: { stage: Konva.Stage | null }) {
       <RemoteSelections zoom={zoom} />
       <ConnectorSelection zoom={zoom} />
       <SelectionTransformer stage={stage} />
+      <ConnectDots zoom={zoom} />
       <AttachHighlight zoom={zoom} />
       <LayerHover zoom={zoom} />
       <Draft zoom={zoom} />

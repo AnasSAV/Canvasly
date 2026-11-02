@@ -127,6 +127,8 @@ const ShapeFields = {
   text: z.string().default(''),
   textColor: Color,
   align: Align.default('center'),
+  /** Null keeps the look the shape kind has by default. */
+  cornerRadius: z.number().min(0).nullable().default(null),
   ...TextStyle,
 };
 

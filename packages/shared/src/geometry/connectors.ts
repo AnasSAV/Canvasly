@@ -86,6 +86,20 @@ export function nearestSideAnchor(box: OrientedBox, p: Vec, threshold: number): 
   return best;
 }
 
+/** Whichever side's middle is closest to p, for lines that should meet a shape squarely. */
+export function closestSideAnchor(box: OrientedBox, p: Vec): [number, number] {
+  let best = SIDE_ANCHORS[0]!;
+  let bestD = Infinity;
+  for (const a of SIDE_ANCHORS) {
+    const d = dist(anchorToWorld(box, a), p);
+    if (d < bestD) {
+      bestD = d;
+      best = a;
+    }
+  }
+  return [best[0], best[1]];
+}
+
 /** Where an end "points from" before outline clipping. */
 function referencePoint(end: ConnectorEnd, get: GetAttachTarget): Vec | null {
   if (end.kind === 'point') return { x: end.x, y: end.y };

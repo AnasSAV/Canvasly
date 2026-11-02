@@ -9,6 +9,7 @@ import {
   isShapeObject,
   keyAbove,
   keysAbove,
+  makeConnector,
   makeImage,
   makeShape,
   makeSticky,
@@ -307,7 +308,9 @@ export function convertObject(board: Board, o: TextBearingObject, target: Conver
     const size =
       o.type === 'text' ? { w: Math.max(o.w + 40, 160), h: Math.max(o.h + 40, 100) } : { w: o.w, h: o.h };
     const shape = makeShape(target, { x, y, ...size }, z);
-    const style = isShapeObject(o) ? { fill: o.fill, stroke: o.stroke, strokeWidth: o.strokeWidth } : {};
+    const style = isShapeObject(o)
+      ? { fill: o.fill, stroke: o.stroke, strokeWidth: o.strokeWidth, cornerRadius: o.cornerRadius }
+      : {};
     next = { ...shape, ...style, ...kept, textColor: ink };
   }
   board.transact(() => insertObject(board.objects, next), true);
@@ -383,4 +386,44 @@ export function spreadDocument(board: Board, o: DocumentObject): string[] {
   });
   addObjects(board, images);
   return images.map((i) => i.id);
+}
+
+/** The side opposite a side anchor. */
+const opposite = (anchor: readonly [number, number]): [number, number] => [1 - anchor[0], 1 - anchor[1]];
+
+const QUICK_ADD_GAP = 120;
+
+/**
+ * Click on a connect dot: another object like this one, on that side, already joined to it. Only for what makes sense
+ * to repeat, and null otherwise. Returns the new object's id.
+ */
+export function addConnectedCopy(
+  board: Board,
+  o: BoardObject,
+  side: readonly [number, number],
+): string | null {
+  if (o.type !== 'sticky' && !isShapeObject(o)) return null;
+  const at = {
+    x: o.x + (side[0] - 0.5) * 2 * (o.w + QUICK_ADD_GAP),
+    y: o.y + (side[1] - 0.5) * 2 * (o.h + QUICK_ADD_GAP),
+  };
+  const keys = keysAbove(board.store.getSorted().at(-1)?.z ?? null, 2);
+  const copy: BoardObject =
+    o.type === 'sticky'
+      ? { ...makeSticky(at, keys[0]!, o.color), w: o.w, h: o.h, font: o.font }
+      : {
+          ...makeShape(o.type, { ...at, w: o.w, h: o.h }, keys[0]!, { fill: o.fill, stroke: o.stroke }),
+          strokeWidth: o.strokeWidth,
+          cornerRadius: o.cornerRadius,
+          textColor: o.textColor,
+          font: o.font,
+        };
+  const line = makeConnector(
+    { kind: 'attached', objectId: o.id, anchor: [side[0], side[1]] },
+    { kind: 'attached', objectId: copy.id, anchor: opposite(side) },
+    keys[1]!,
+    { arrow: true },
+  );
+  addObjects(board, [copy, { ...line, routing: 'curved' }]);
+  return copy.id;
 }

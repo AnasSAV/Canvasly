@@ -44,7 +44,7 @@ export interface ContextMenuState {
 export type Draft =
   | { kind: 'shape'; shape: ShapeKind | 'frame' | 'startview'; rect: Rect }
   | { kind: 'pen'; points: number[]; color: string; size: number; opacity: number }
-  | { kind: 'connector'; start: ConnectorEnd; end: ConnectorEnd; arrow: boolean }
+  | { kind: 'connector'; start: ConnectorEnd; end: ConnectorEnd; arrow: boolean; curved?: boolean }
   | { kind: 'eraser'; x: number; y: number; r: number }
   | { kind: 'lasso'; points: number[] };
 

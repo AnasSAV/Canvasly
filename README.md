@@ -126,6 +126,9 @@ touch support.
   positions, styles, rotation and shapes. It holds no image files and names fonts only by opaque id, so
   pictures become placeholders, and only fonts mapped in
   [`canvaImport.ts`](apps/web/src/doc/canvaImport.ts) carry over.
+- **Connecting and corners:** dots around a selected object draw a curved arrow when dragged, meeting the other
+  shape squarely at the side nearest the pointer; clicking one adds a joined copy on that side. Rectangles and
+  every straight-sided shape have a corner radius.
 - **Lines:** straight, elbowed or curved, leaving and arriving straight out of the sides they're attached to;
   a choice of ends, solid/dashed/dotted, thickness, and a label. The middle handle bends a line, and
   double-clicking it straightens the line again. Bends are stored relative to the ends, so they follow them.

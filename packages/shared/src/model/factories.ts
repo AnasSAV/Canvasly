@@ -94,6 +94,7 @@ export function makeShape(
     text: '',
     textColor: '#1a1a1a',
     align: 'center',
+    cornerRadius: null,
     ...PLAIN_TEXT,
   };
 }

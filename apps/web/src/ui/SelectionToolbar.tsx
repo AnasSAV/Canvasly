@@ -8,6 +8,7 @@ import {
   isSafeLink,
   isShapeObject,
   listKind,
+  patchObject,
   toggleList,
   worldToScreen,
   type BoardObject,
@@ -19,6 +20,7 @@ import {
   type LineRouting,
   type ListKind,
   type ObjectPatch,
+  type ShapeObject,
   type TextBearingObject,
 } from '@canvasly/shared';
 import {
@@ -50,6 +52,7 @@ import {
   Rows2,
   Shapes,
   Spline,
+  SquareRoundCorner,
   Strikethrough,
   Type,
   Underline,
@@ -67,7 +70,7 @@ import {
 } from 'react';
 import type { Actions } from '../doc/actions';
 import { ROTATE_ANCHOR_OFFSET } from '../canvas/Overlay';
-import { SHAPE_LABELS } from '../canvas/shapePaths';
+import { SHAPE_LABELS, cornerRadiusOf, hasCorners } from '../canvas/shapePaths';
 import { FONTS, FONT_MENU, MAX_FONT_SIZE, ensureFont, stepFontSize } from '../canvas/text';
 import { useDocumentPage } from '../doc/assets';
 import { useBoard, useDocVersion } from '../doc/context';
@@ -470,6 +473,72 @@ function MoreMenu({ actions, title }: { actions: Actions; title: string }) {
       {isOpen && (
         <Dropdown className="right-0">
           <MenuList entries={objectContextEntries(board, actions, title)} onClose={close} />
+        </Dropdown>
+      )}
+    </div>
+  );
+}
+
+const CORNER_PRESETS = [
+  { label: 'Square', fraction: 0 },
+  { label: 'Slight', fraction: 0.15 },
+  { label: 'Round', fraction: 0.4 },
+  { label: 'Full', fraction: 1 },
+];
+
+/** Rounding for the selected shapes. The slider's whole drag is one undo step. */
+function CornerMenu({ shapes, ids }: { shapes: ShapeObject[]; ids: string[] }) {
+  const board = useBoard();
+  const { isOpen, toggle } = useDropdown('corners');
+  const first = shapes[0]!;
+  const max = Math.round(Math.min(first.w, first.h) / 2);
+  const value = Math.min(max, Math.round(cornerRadiusOf(first.type, first.w, first.h, first.cornerRadius)));
+  const set = (cornerRadius: number, discrete = true) =>
+    board.transact(() => {
+      for (const id of ids) patchObject(board.objects, id, { cornerRadius });
+    }, discrete);
+  return (
+    <div className="relative">
+      <IconButton label="Corner radius" active={isOpen} onClick={toggle} data-testid="corner-radius">
+        <SquareRoundCorner size={18} />
+      </IconButton>
+      {isOpen && (
+        <Dropdown className={`${panel} left-1/2 w-52 -translate-x-1/2 p-2.5`}>
+          <div className="mb-2.5 grid grid-cols-4 gap-1">
+            {CORNER_PRESETS.map(({ label, fraction }) => {
+              const preset = Math.round(max * fraction);
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  aria-pressed={value === preset}
+                  onClick={() => set(preset)}
+                  className={`rounded-md py-1 text-[11px] font-medium ${
+                    value === preset
+                      ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300'
+                      : 'hover:bg-gray-100 dark:hover:bg-zinc-800'
+                  }`}
+                  data-testid={`corner-${label.toLowerCase()}`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+          <label className="text-xs font-medium text-gray-500 dark:text-zinc-400">
+            Radius: {value}
+            <input
+              type="range"
+              min={0}
+              max={max}
+              value={value}
+              onPointerDown={() => board.beginGesture()}
+              onPointerUp={() => board.endGesture()}
+              onChange={(e) => set(Number(e.target.value), false)}
+              className="mt-1 block w-full accent-indigo-600"
+              data-testid="corner-radius-input"
+            />
+          </label>
         </Dropdown>
       )}
     </div>
@@ -904,6 +973,7 @@ function StyleControls({ objs, ids }: { objs: BoardObject[]; ids: string[] }) {
         }
         onPick={(textColor) => updateEach(board, ids, (o) => (isShapeObject(o) ? { textColor } : null))}
       />,
+      shapes.every((o) => hasCorners(o.type)) && <CornerMenu key="corners" shapes={shapes} ids={ids} />,
     );
   }
   if (only('text') && first?.type === 'text') {

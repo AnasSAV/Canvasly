@@ -162,7 +162,7 @@ const Shape = ({ o, editing, lowDetail, dark }: { o: ShapeObject } & DetailProps
         perfectDrawEnabled={false}
         sceneFunc={(c: Context, shape: KonvaShape) => {
           c.beginPath();
-          traceShape(native(c), o.type, o.w, o.h);
+          traceShape(native(c), o.type, o.w, o.h, o.cornerRadius);
           c.fillStrokeShape(shape);
         }}
       />
