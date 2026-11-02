@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { eraseFromStroke, pointInPolygon, recognizeStroke } from './geometry/strokes';
+import { parsePageRanges } from './model/pageRanges';
 import { continueList, listKind, toggleList } from './model/textFormat';
 import { BoardObject, isSafeLink } from './schemas/objects';
 import { makeShape, makeSticky, makeText } from './model/factories';
@@ -184,5 +185,41 @@ describe('text styling', () => {
     expect(BoardObject.parse(text)).toMatchObject({ highlight: 'transparent', background: 'transparent' });
     const shape = makeShape('rect', { x: 0, y: 0, w: 10, h: 10 }, 'a0');
     expect(BoardObject.safeParse(shape).success).toBe(true);
+  });
+});
+
+describe('parsePageRanges', () => {
+  const pages = (text: string, count = 21) => {
+    const r = parsePageRanges(text, count);
+    return 'pages' in r ? r.pages : r.error;
+  };
+
+  it('reads single pages, ranges and mixes, numbered from 1', () => {
+    expect(pages('5')).toEqual([4]);
+    expect(pages('1-3')).toEqual([0, 1, 2]);
+    expect(pages('1-3, 5, 8-9')).toEqual([0, 1, 2, 4, 7, 8]);
+    expect(pages(' 2 - 3 ,, 7 ')).toEqual([1, 2, 6]);
+    expect(pages('2–3')).toEqual([1, 2]); // the dash a phone or a paste might give
+  });
+
+  it('keeps the order given, with each page once', () => {
+    expect(pages('5, 1')).toEqual([4, 0]);
+    expect(pages('1-3, 2-4')).toEqual([0, 1, 2, 3]);
+  });
+
+  it('runs an open end to the edge of the document', () => {
+    expect(pages('19-')).toEqual([18, 19, 20]);
+    expect(pages('-2')).toEqual([0, 1]);
+  });
+
+  it('explains what is wrong', () => {
+    expect(pages('')).toContain('Enter the pages');
+    expect(pages('  , ')).toContain('Enter the pages');
+    expect(pages('abc')).toContain('"abc"');
+    expect(pages('-')).toContain('"-"');
+    expect(pages('1-2-3')).toContain('"1-2-3"');
+    expect(pages('5-3')).toContain('backwards');
+    expect(pages('0')).toContain('pages 1 to 21');
+    expect(pages('20-25')).toContain('pages 1 to 21');
   });
 });

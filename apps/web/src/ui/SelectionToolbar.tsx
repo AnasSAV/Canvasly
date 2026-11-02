@@ -8,6 +8,7 @@ import {
   isSafeLink,
   isShapeObject,
   listKind,
+  parsePageRanges,
   patchObject,
   toggleList,
   worldToScreen,
@@ -34,10 +35,10 @@ import {
   ChevronRight,
   ChevronUp,
   Columns2,
-  Copy,
   CornerDownRight,
   Download,
   EllipsisVertical,
+  FileOutput,
   Group,
   Highlighter,
   Italic,
@@ -82,9 +83,9 @@ import {
   deleteTableColumn,
   deleteTableRow,
   restyleText,
+  extractPages,
   patch,
   selectionBounds,
-  spreadDocument,
   updateEach,
   type ConvertTarget,
 } from '../doc/ops';
@@ -724,6 +725,113 @@ function LineStyleMenu({
   );
 }
 
+/** Pages as objects of their own: this one, some, or all of them. */
+function ExtractMenu({ o, shown }: { o: DocumentObject; shown: number }) {
+  const board = useBoard();
+  const { isOpen, toggle, close } = useDropdown('extract');
+  const [range, setRange] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const total = o.pages.length;
+
+  const extract = (indexes: number[]) => {
+    const ids = extractPages(board, o, indexes);
+    close();
+    const u = useUI.getState();
+    u.select(ids);
+    // A long document can run far past the edge of the view, so make sure all of it can be seen.
+    const bounds = selectionBounds(board.store, ids);
+    const view = useViewport.getState().visibleRect();
+    if (bounds) {
+      const outside =
+        bounds.x < view.x ||
+        bounds.y < view.y ||
+        bounds.x + bounds.w > view.x + view.w ||
+        bounds.y + bounds.h > view.y + view.h;
+      if (outside) useViewport.getState().fit(bounds);
+    }
+  };
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    const parsed = parsePageRanges(range, total);
+    if ('error' in parsed) setError(parsed.error);
+    else extract(parsed.pages);
+  };
+
+  const row =
+    'flex w-full items-center justify-between gap-3 rounded-md px-2.5 py-1.5 text-left text-sm whitespace-nowrap hover:bg-gray-100 dark:hover:bg-zinc-800';
+  return (
+    <div className="relative">
+      <IconButton label="Extract pages" active={isOpen} onClick={toggle} data-testid="doc-extract">
+        <FileOutput size={18} />
+      </IconButton>
+      {isOpen && (
+        <Dropdown className={`${panel} left-1/2 w-64 -translate-x-1/2 p-1.5`}>
+          <p className="px-2.5 pt-1 pb-1.5 text-xs font-semibold text-gray-500 dark:text-zinc-400">
+            Extract as separate pages
+          </p>
+          <button
+            type="button"
+            className={row}
+            onClick={() => extract([shown])}
+            data-testid="extract-current"
+          >
+            This page
+            <span className="text-xs text-gray-500 dark:text-zinc-400">Page {shown + 1}</span>
+          </button>
+          <button
+            type="button"
+            className={row}
+            onClick={() => extract(o.pages.map((_, i) => i))}
+            data-testid="extract-all"
+          >
+            Entire document
+            <span className="text-xs text-gray-500 dark:text-zinc-400">
+              {total} {total === 1 ? 'page' : 'pages'}
+            </span>
+          </button>
+          <div className="my-1.5 h-px bg-gray-200 dark:bg-zinc-700" />
+          <form onSubmit={submit} className="px-2.5 pb-1.5">
+            <label className="text-sm" htmlFor="extract-range">
+              Custom range
+            </label>
+            <div className="mt-1 flex gap-1.5">
+              <input
+                id="extract-range"
+                autoFocus
+                value={range}
+                placeholder={total > 1 ? `e.g. 1-${Math.min(3, total)}, ${total}` : '1'}
+                onChange={(e) => {
+                  setRange(e.target.value);
+                  setError(null);
+                }}
+                onKeyDown={(e) => e.stopPropagation()}
+                className="min-w-0 flex-1 rounded-md border border-gray-300 px-2 py-1 text-sm outline-none focus:border-indigo-500 dark:border-zinc-600 dark:bg-zinc-800"
+                data-testid="extract-range"
+              />
+              <button
+                type="submit"
+                className="rounded-md bg-indigo-600 px-2.5 py-1 text-sm font-medium text-white hover:bg-indigo-700"
+                data-testid="extract-apply"
+              >
+                Extract
+              </button>
+            </div>
+            {error && (
+              <p
+                className="mt-1.5 text-xs whitespace-normal text-red-600 dark:text-red-400"
+                data-testid="extract-error"
+              >
+                {error}
+              </p>
+            )}
+          </form>
+        </Dropdown>
+      )}
+    </div>
+  );
+}
+
 /** Page turning, for viewers too, plus putting the pages on the board and getting the PDF back. */
 function DocumentControls({ o }: { o: DocumentObject }) {
   const board = useBoard();
@@ -781,15 +889,7 @@ function DocumentControls({ o }: { o: DocumentObject }) {
         <ChevronRight size={18} />
       </IconButton>
       <Divider />
-      {!readOnly && (
-        <IconButton
-          label="Show all pages on the board"
-          onClick={() => useUI.getState().select(spreadDocument(board, o))}
-          data-testid="doc-spread"
-        >
-          <Copy size={18} />
-        </IconButton>
-      )}
+      {!readOnly && <ExtractMenu o={o} shown={shown} />}
       <IconButton
         label="Download as PDF"
         onClick={() => void exportDocumentPdf(board, o).catch((e: Error) => alert(e.message))}

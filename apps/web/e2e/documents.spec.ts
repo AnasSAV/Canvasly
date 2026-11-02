@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { jsPDF } from 'jspdf';
 import type * as UIModule from '../src/state/ui';
+import type * as ViewportModule from '../src/state/viewport';
 import { createBoard, openBoard, signUp } from './helpers';
 
 type Obj = Record<string, unknown> & { id: string; type: string; x: number; y: number; w: number; h: number };
@@ -176,13 +177,6 @@ test('pages spread onto the board, the PDF downloads, and one undo removes the d
   await page.getByTestId('doc-download').click();
   expect((await download).suggestedFilename()).toBe('Spread.pdf');
 
-  await page.getByTestId('doc-spread').click();
-  await expect.poll(async () => (await all(page)).filter((o) => o.type === 'image').length).toBe(2);
-  const images = (await all(page)).filter((o) => o.type === 'image').sort((a, b) => a.x - b.x);
-  expect(images[1]!.x).toBeGreaterThan(images[0]!.x + images[0]!.w);
-
-  await page.keyboard.press('Control+z');
-  await expect.poll(async () => (await all(page)).filter((o) => o.type === 'image').length).toBe(0);
   await page.keyboard.press('Control+z');
   await expect.poll(async () => (await all(page)).length).toBe(0);
 });
@@ -202,6 +196,132 @@ test('a viewer can turn pages for themselves, without changing them for anyone',
   await page.getByTestId('doc-next').click();
   await expect(page.getByTestId('doc-page')).toHaveValue('2');
   expect((await documents(page))[0]!.page).toBe(0);
-  await expect(page.getByTestId('doc-spread')).toHaveCount(0);
+  await expect(page.getByTestId('doc-extract')).toHaveCount(0);
   await expect(page.getByTestId('selection-more')).toHaveCount(0);
+});
+
+const images = async (page: Page) => (await all(page)).filter((o) => o.type === 'image');
+const assetsOf = (doc: Obj) => (doc.pages as { assetId: string }[]).map((p) => p.assetId);
+
+async function uploadPdf(page: Page, pages: number) {
+  await page.getByTestId('file-input').setInputFiles({
+    name: 'Handout.pdf',
+    mimeType: 'application/pdf',
+    buffer: pdf(pages),
+  });
+  await expect.poll(async () => (await documents(page)).length, { timeout: 30_000 }).toBe(1);
+  return (await documents(page))[0]!;
+}
+
+test('extract one page: the one on show becomes its own object, and the PDF stays', async ({ page }) => {
+  const doc = await uploadPdf(page, 3);
+  await page.getByTestId('doc-next').click();
+  await expect(page.getByTestId('doc-page')).toHaveValue('2');
+
+  await page.getByTestId('doc-extract').click();
+  await expect(page.getByTestId('extract-current')).toContainText('Page 2');
+  await page.getByTestId('extract-current').click();
+
+  await expect.poll(async () => (await images(page)).length).toBe(1);
+  const [image] = await images(page);
+  expect(image!.assetId).toBe(assetsOf(doc)[1]);
+  expect(await documents(page)).toHaveLength(1);
+  expect(image!.x).toBeGreaterThan(doc.x + doc.w); // beside it, not on top
+
+  // Extracting again doesn't pile up on the same spot.
+  await page.evaluate(
+    async ({ url, id }) => {
+      const mod = (await import(/* @vite-ignore */ url)) as typeof UIModule;
+      mod.useUI.getState().select([id]);
+    },
+    { url: '/src/state/ui.ts', id: doc.id },
+  );
+  await page.getByTestId('doc-extract').click();
+  await page.getByTestId('extract-current').click();
+  await expect.poll(async () => (await images(page)).length).toBe(2);
+  const [first, second] = (await images(page)).sort((a, b) => a.x - b.x);
+  expect(second!.x).toBeGreaterThanOrEqual(first!.x + first!.w);
+});
+
+test('extract a custom range: those pages in that order, and bad ranges are explained', async ({ page }) => {
+  const doc = await uploadPdf(page, 5);
+  await page.getByTestId('doc-extract').click();
+  const range = page.getByTestId('extract-range');
+
+  await range.fill('9');
+  await page.getByTestId('extract-apply').click();
+  await expect(page.getByTestId('extract-error')).toContainText('pages 1 to 5');
+  await range.fill('4-2');
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('extract-error')).toContainText('backwards');
+  expect(await images(page)).toHaveLength(0);
+
+  // Typing clears the message, and shortcut keys don't reach the board from here.
+  await range.fill('');
+  await range.pressSequentially('1-2, 4');
+  await expect(page.getByTestId('extract-error')).toHaveCount(0);
+  await expect(page.getByTestId('selection-toolbar')).toBeVisible();
+  await page.keyboard.press('Enter');
+
+  await expect.poll(async () => (await images(page)).length).toBe(3);
+  const all3 = (await images(page)).sort((a, b) => a.x - b.x);
+  const assets = assetsOf(doc);
+  expect(all3.map((i) => i.assetId)).toEqual([assets[0], assets[1], assets[3]]);
+  expect(await documents(page)).toHaveLength(1);
+  await page.keyboard.press('Control+z');
+  await expect.poll(async () => (await images(page)).length).toBe(0);
+});
+
+test('extract the entire document: every page is its own object, worked on separately', async ({ page }) => {
+  const doc = await uploadPdf(page, 7);
+  await page.getByTestId('doc-extract').click();
+  await expect(page.getByTestId('extract-all')).toContainText('7 pages');
+  await page.getByTestId('extract-all').click();
+
+  await expect.poll(async () => (await images(page)).length).toBe(7);
+  expect(await documents(page)).toHaveLength(0);
+  const pages = (await images(page)).sort((a, b) => a.y - b.y || a.x - b.x);
+  expect(pages.map((p) => p.assetId)).toEqual(assetsOf(doc));
+
+  // Five to a row, starting where the document was.
+  expect(pages[0]).toMatchObject({ x: doc.x, y: doc.y, w: doc.w, h: doc.h });
+  expect(pages[5]!.y).toBeGreaterThan(pages[0]!.y + pages[0]!.h);
+  expect(pages[5]!.x).toBe(pages[0]!.x);
+  for (const p of pages) expect(p.groupId).toBeNull();
+
+  // All of it was brought into view, and each page can now be moved on its own.
+  const before = pages[2]!;
+  const cam = await page.evaluate(async (url) => {
+    const mod = (await import(/* @vite-ignore */ url)) as typeof ViewportModule;
+    return mod.useViewport.getState().camera;
+  }, '/src/state/viewport.ts');
+  const at = (wx: number, wy: number): [number, number] => [wx * cam.zoom + cam.x, wy * cam.zoom + cam.y];
+  const [sx, sy] = at(before.x + before.w / 2, before.y + before.h / 2);
+  // They arrive selected together; clicking one narrows to just that page.
+  await page.mouse.click(sx, sy);
+  expect(
+    await page.evaluate(async (url) => {
+      const mod = (await import(/* @vite-ignore */ url)) as typeof UIModule;
+      return mod.useUI.getState().selectedIds;
+    }, '/src/state/ui.ts'),
+  ).toEqual([before.id]);
+  await page.mouse.move(sx, sy);
+  await page.mouse.down();
+  await page.mouse.move(sx + 60, sy + 400, { steps: 6 });
+  await page.mouse.up();
+  await expect
+    .poll(async () => (await all(page)).find((o) => o.id === before.id)!.y)
+    .toBeGreaterThan(before.y + 100);
+  const others = (await images(page)).filter((o) => o.id !== before.id);
+  for (const o of others) {
+    const was = pages.find((p) => p.id === o.id)!;
+    expect(o.x).toBe(was.x);
+    expect(o.y).toBe(was.y);
+  }
+
+  // Moving it was one step, and the extraction is another: back to one PDF, on the page it was.
+  await page.keyboard.press('Control+z');
+  await page.keyboard.press('Control+z');
+  await expect.poll(async () => (await documents(page)).length).toBe(1);
+  expect(await images(page)).toHaveLength(0);
 });

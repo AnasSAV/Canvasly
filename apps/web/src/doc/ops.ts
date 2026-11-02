@@ -367,24 +367,46 @@ export function textShortcut(board: Board, ids: string[], e: KeyboardEvent | Rea
   return false;
 }
 
-/** Lay a document's pages out on the board as separate images, beside it. Returns their ids. */
-export function spreadDocument(board: Board, o: DocumentObject): string[] {
+/**
+ * Turn pages of a document into images of their own, in a grid. Taking every page replaces the document, starting where
+ * it was; taking some leaves it in place with the pages beside it, clear of anything already there. Either way it's one
+ * undo step. Returns the new ids.
+ */
+export function extractPages(board: Board, o: DocumentObject, indexes: number[]): string[] {
   const COLUMNS = 5;
   const GAP = 40;
+  const pages = indexes.flatMap((i) => o.pages[i] ?? []);
+  if (!pages.length) return [];
+  const replacing = pages.length === o.pages.length && !o.locked;
+
   const pageW = o.w;
-  const rowH = Math.max(...o.pages.map((p) => (p.h / p.w) * pageW));
-  const keys = keysAbove(board.store.getSorted().at(-1)?.z ?? null, o.pages.length);
-  const images = o.pages.map((p, i) => {
-    const img = makeImage({ x: 0, y: 0 }, keys[i]!, p.assetId, p.w, p.h);
-    return {
-      ...img,
-      x: o.x + o.w + GAP + (i % COLUMNS) * (pageW + GAP),
-      y: o.y + Math.floor(i / COLUMNS) * (rowH + GAP),
-      w: pageW,
-      h: (p.h / p.w) * pageW,
-    };
-  });
-  addObjects(board, images);
+  const rowH = Math.max(...pages.map((p) => (p.h / p.w) * pageW));
+  const columns = Math.min(COLUMNS, pages.length);
+  const rows = Math.ceil(pages.length / COLUMNS);
+  const width = columns * pageW + (columns - 1) * GAP;
+  const height = rows * rowH + (rows - 1) * GAP;
+
+  let left = replacing ? o.x : o.x + o.w + GAP;
+  if (!replacing) {
+    // Extracting more later shouldn't land on what was extracted before.
+    for (let i = 0; i < 200; i++) {
+      if (!board.store.query({ x: left, y: o.y, w: width, h: height }).length) break;
+      left += pageW + GAP;
+    }
+  }
+
+  const keys = keysAbove(board.store.getSorted().at(-1)?.z ?? null, pages.length);
+  const images = pages.map((p, i) => ({
+    ...makeImage({ x: 0, y: 0 }, keys[i]!, p.assetId, p.w, p.h),
+    x: left + (i % COLUMNS) * (pageW + GAP),
+    y: o.y + Math.floor(i / COLUMNS) * (rowH + GAP),
+    w: pageW,
+    h: (p.h / p.w) * pageW,
+  }));
+  board.transact(() => {
+    for (const image of images) insertObject(board.objects, image);
+    if (replacing) deleteObjects(board, [o.id]);
+  }, true);
   return images.map((i) => i.id);
 }
 

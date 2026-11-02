@@ -171,6 +171,8 @@ browser with pdf.js, which is only downloaded when someone adds a PDF, compresse
 uploaded as ordinary assets (first 100 pages, up to a 100 MB file). A `document` object then holds the page list,
 and shows one at a time with page turning in the selection toolbar. Pages are pictures, so their text can't be
 selected or searched, and the original file can't be recovered: "Download as PDF" rebuilds one from the images.
+Pages can be extracted into images of their own: the one on show, a custom range like `1-3, 5, 8-`, or the entire
+document, which replaces the PDF. They reuse the stored page images, so extracting takes no extra storage.
 
 ### Images and the size trade-off
 

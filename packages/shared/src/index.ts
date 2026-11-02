@@ -20,5 +20,6 @@ export * from './model/canvaClipboard';
 export * from './model/clipboard';
 export * from './model/factories';
 export * from './model/layers';
+export * from './model/pageRanges';
 export * from './model/templates';
 export * from './model/textFormat';
