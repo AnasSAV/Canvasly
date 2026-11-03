@@ -453,3 +453,13 @@ test('the logo on a board goes back to the home page', async ({ page }) => {
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByTestId('greeting')).toBeVisible();
 });
+
+test('clicking a menu item whose submenu is already open from hovering keeps it open', async ({ page }) => {
+  await page.getByTestId('board-menu').click();
+  const preferences = page.getByRole('menuitem', { name: 'Preferences' });
+  await preferences.hover();
+  const inside = page.getByRole('menuitem', { name: 'Show object size' });
+  await expect(inside).toBeVisible();
+  await preferences.click();
+  await expect(inside).toBeVisible();
+});

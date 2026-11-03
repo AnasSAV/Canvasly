@@ -50,8 +50,9 @@ export function MenuList({ entries, onClose }: { entries: MenuEntry[]; onClose: 
               aria-expanded={e.submenu ? open : undefined}
               data-active={open}
               onClick={() => {
+                // Hovering has usually opened it by now, so this mustn't toggle it closed again.
                 if (e.submenu) {
-                  setOpenIndex(open ? null : i);
+                  setOpenIndex(i);
                   return;
                 }
                 onClose();
