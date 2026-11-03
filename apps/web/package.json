@@ -55,7 +55,7 @@
     "jspdf": "^4.2.1",
     "konva": "^10.9.0",
     "lib0": "^0.2.119",
-    "lucide-react": "^1.63.0",
+    "lucide-react": "^1.65.0",
     "pdfjs-dist": "^6.4.299",
     "perfect-freehand": "^1.2.3",
     "rbush": "^4.0.1",
