@@ -27,6 +27,44 @@ export function keysAbove(top: string | null, n: number): string[] {
   return generateNKeysBetween(top, null, n);
 }
 
+/** Which positions to leave alone: the longest run of keys that's already in order. */
+function keysInOrder(keys: readonly string[]): Set<number> {
+  const tails: number[] = [];
+  const before = new Array<number>(keys.length).fill(-1);
+  keys.forEach((key, i) => {
+    let lo = 0;
+    let hi = tails.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (keys[tails[mid]!]! < key) lo = mid + 1;
+      else hi = mid;
+    }
+    if (lo > 0) before[i] = tails[lo - 1]!;
+    tails[lo] = i;
+  });
+  const kept = new Set<number>();
+  for (let i = tails.at(-1) ?? -1; i >= 0; i = before[i]!) kept.add(i);
+  return kept;
+}
+
+/**
+ * New z keys that put objects in the given order, bottom first. Only what has to change changes, so that someone
+ * else moving another object at the same moment still merges cleanly.
+ */
+export function keysForOrder(bottomUp: readonly Ordered[]): Map<string, string> {
+  const kept = keysInOrder(bottomUp.map((o) => o.z));
+  const keys = new Map<string, string>();
+  for (let i = 0; i < bottomUp.length; i++) {
+    if (kept.has(i)) continue;
+    let end = i;
+    while (end < bottomUp.length && !kept.has(end)) end++;
+    const fresh = generateNKeysBetween(bottomUp[i - 1]?.z ?? null, bottomUp[end]?.z ?? null, end - i);
+    for (let j = i; j < end; j++) keys.set(bottomUp[j]!.id, fresh[j - i]!);
+    i = end;
+  }
+  return keys;
+}
+
 /** New z keys moving `ids` above everything, preserving their relative order. `sorted` must be in paint order. */
 export function bringToFrontKeys(sorted: readonly Ordered[], ids: ReadonlySet<string>): Map<string, string> {
   const moving = sorted.filter((o) => ids.has(o.id));

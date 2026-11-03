@@ -3,6 +3,8 @@ import {
   bringToFrontKeys,
   cellKey,
   cloneForPaste,
+  comparePaint,
+  gatherGroupKeys,
   getMetaMap,
   hasText,
   insertObject,
@@ -10,6 +12,7 @@ import {
   keyAbove,
   keysAbove,
   makeConnector,
+  moveLayers,
   makeImage,
   makeShape,
   makeSticky,
@@ -25,6 +28,7 @@ import {
   type ClipboardPayload,
   type ConnectorEnd,
   type DocumentObject,
+  type LayerTarget,
   type ObjectPatch,
   type Rect,
   type ShapeKind,
@@ -100,20 +104,43 @@ export function deleteObjects(board: Board, ids: Iterable<string>): void {
   }, true);
 }
 
+/** New z keys take effect, with any group they split brought back together. */
+function applyZ(board: Board, keys: Map<string, string>) {
+  const after = board.store
+    .getSorted()
+    .map((o) => ({ ...o, z: keys.get(o.id) ?? o.z }))
+    .sort(comparePaint);
+  const all = new Map([...keys, ...gatherGroupKeys(after)]);
+  board.transact(() => all.forEach((z, id) => patchObject(board.objects, id, { z })), true);
+}
+
 export function bringToFront(board: Board, ids: string[]) {
-  const keys = bringToFrontKeys(board.store.getSorted(), new Set(ids));
-  board.transact(() => keys.forEach((z, id) => patchObject(board.objects, id, { z })), true);
+  applyZ(board, bringToFrontKeys(board.store.getSorted(), new Set(ids)));
 }
 
 export function sendToBack(board: Board, ids: string[]) {
-  const keys = sendToBackKeys(board.store.getSorted(), new Set(ids));
-  board.transact(() => keys.forEach((z, id) => patchObject(board.objects, id, { z })), true);
+  applyZ(board, sendToBackKeys(board.store.getSorted(), new Set(ids)));
 }
 
+/** Rearranging from the layers list: the list's order becomes the stacking order. */
+export function reorderLayers(board: Board, ids: Iterable<string>, target: LayerTarget) {
+  const changes = moveLayers(board.store.getSorted(), new Set(ids), target);
+  if (!changes.size) return;
+  board.transact(() => changes.forEach((change, id) => patchObject(board.objects, id, change)), true);
+}
+
+/** A group's members become neighbors in the stack, at its topmost member. */
 export function group(board: Board, ids: string[]) {
   if (ids.length < 2) return;
   const groupId = newId();
-  board.transact(() => ids.forEach((id) => patchObject(board.objects, id, { groupId })), true);
+  const members = new Set(ids);
+  const keys = gatherGroupKeys(
+    board.store.getSorted().map((o) => (members.has(o.id) ? { ...o, groupId } : o)),
+  );
+  board.transact(() => {
+    ids.forEach((id) => patchObject(board.objects, id, { groupId }));
+    keys.forEach((z, id) => patchObject(board.objects, id, { z }));
+  }, true);
 }
 
 export function ungroup(board: Board, ids: string[]) {

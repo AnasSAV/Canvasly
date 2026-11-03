@@ -57,6 +57,10 @@ export function TooltipLayer() {
     };
     const onOver = (e: PointerEvent) => {
       if (e.pointerType === 'touch') return;
+      if (e.buttons) {
+        hide(); // mid-drag
+        return;
+      }
       const el = (e.target as Element | null)?.closest?.<HTMLElement>('[data-tip]');
       if (el) show(el);
       else if (current) hide();

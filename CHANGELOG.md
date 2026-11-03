@@ -15,7 +15,8 @@ The first public release, and the first version of
 - Infinite canvas with zoom, pan, snapping, grouping, locking, undo and redo
 - Stickies, text, 18 shape kinds with corner rounding, frames, tables, and bar, line, area, pie and donut charts
 - 15 templates, inserted into a board or used to start one
-- Figma-style layers panel with collapsible groups that can be renamed
+- Figma-style layers panel that matches the stacking order: drag rows to rearrange, into groups and out, with collapsible
+  groups that can be renamed
 
 **Text**
 

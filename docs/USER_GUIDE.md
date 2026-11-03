@@ -65,8 +65,13 @@ PowerPoint files aren't supported.
 
 ![The layers panel with a group](screenshots/layers.png)
 
-The tab on the right edge lists everything on the board, top first, with groups as folders that collapse. Click a row to
-select it, even a single member of a group, double-click to zoom to it, or double-click a group to rename it.
+The tab on the right edge lists everything on the board in stacking order, with what's on top first, and groups as folders
+that collapse. Click a row to select it, even a single member of a group, double-click to zoom to it, or double-click a group
+to rename it.
+
+Drag a row up or down to change what's on top, or press Alt + up or down with the row focused. Selected rows move together.
+Drop a row between a group's rows to add it to the group, or drag it out to take it back out; just below a group's last row,
+how far in you drop decides which. Frames always stay beneath everything else, since they hold what's on them.
 
 ## Working together
 

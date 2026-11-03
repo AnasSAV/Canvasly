@@ -138,7 +138,9 @@ sequenceDiagram
   [`widgets.ts`](../apps/web/src/canvas/widgets.ts), shared by the canvas and exports.
 - **Layers:** a tab on the right edge opens a list of everything on the board, top first, with groups as
   folders that collapse. Rows select, double-clicking zooms to an object or renames a group, and hovering
-  outlines the object. Group names live in the document's meta map, so they sync.
+  outlines the object. Group names live in the document's meta map, so they sync. The list is the stacking
+  order: dragging a row rewrites only the z keys that have to change, which merges with other people's edits,
+  and grouping keeps a group's members next to each other in the stack.
 - **Text and fonts:** new text hugs its content and grows as you type; dragging a side handle fixes the
   width so it wraps. Text, stickies and shapes can use any of 28 fonts, self-hosted through `@fontsource`
   (Latin only; other scripts fall back to system fonts), and take bold, italic, underline, strikethrough,

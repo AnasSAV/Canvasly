@@ -33,17 +33,17 @@ Infinite canvas, live cursors, offline edits, sharing, PDFs and templates, with 
 
 ## Features
 
-| Area              | What you get                                                                                         |
-| ----------------- | ---------------------------------------------------------------------------------------------------- |
-| **Canvas**        | Infinite zoom and pan, 18 shapes with corner rounding, stickies, frames, tables, bar to donut charts |
-| **Text**          | Boxes that fit their content, 28 fonts, formatting, lists, links, highlights, keyboard shortcuts     |
-| **Lines**         | One-drag connect dots; straight, elbow and curved routes; five end styles, dashes, bends, labels     |
-| **Drawing**       | Pen and highlighter with custom-color presets, smart shape recognition, two erasers, lasso           |
-| **Files**         | Drag and drop images and PDFs, page turning, page extraction, PNG, PDF and JSON export               |
-| **Collaboration** | Live cursors, presence, follow mode, comments, per-user undo, offline edits that merge later         |
-| **Sharing**       | Owner, editor and viewer roles enforced on the server, invites, public and editor links              |
-| **Organizing**    | Figma-style layers with collapsible groups, 15 templates, presentation mode, minimap                 |
-| **Interface**     | Dark mode, touch and phone support, right-click menus, paste from other apps including Canva         |
+| Area              | What you get                                                                                                    |
+| ----------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Canvas**        | Infinite zoom and pan, 18 shapes with corner rounding, stickies, frames, tables, bar to donut charts            |
+| **Text**          | Boxes that fit their content, 28 fonts, formatting, lists, links, highlights, keyboard shortcuts                |
+| **Lines**         | One-drag connect dots; straight, elbow and curved routes; five end styles, dashes, bends, labels                |
+| **Drawing**       | Pen and highlighter with custom-color presets, smart shape recognition, two erasers, lasso                      |
+| **Files**         | Drag and drop images and PDFs, page turning, page extraction, PNG, PDF and JSON export                          |
+| **Collaboration** | Live cursors, presence, follow mode, comments, per-user undo, offline edits that merge later                    |
+| **Sharing**       | Owner, editor and viewer roles enforced on the server, invites, public and editor links                         |
+| **Organizing**    | Figma-style layers you can drag to rearrange, with collapsible groups, 15 templates, presentation mode, minimap |
+| **Interface**     | Dark mode, touch and phone support, right-click menus, paste from other apps including Canva                    |
 
 ## Screenshots
 
@@ -159,7 +159,7 @@ These are known limits, in rough priority order. Suggestions are welcome in
 [issues](https://github.com/AnasSAV/Canvasly/issues).
 
 - [ ] Formatting selected words, rather than the whole text of an object
-- [ ] Reordering in the layers panel by dragging, and nested groups
+- [ ] Nested groups
 - [ ] Dragging table columns to resize them
 - [ ] Elbow lines that route around other shapes
 - [ ] Word, Excel and PowerPoint files
