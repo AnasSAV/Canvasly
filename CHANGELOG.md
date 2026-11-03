@@ -3,7 +3,7 @@
 Notable changes to Canvasly. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0] - 2026-11-02
+## [1.0.0] - 2026-11-03
 
 The first public release, and the first version of
 [`@anassav/canvasly-shared`](packages/shared/README.md).

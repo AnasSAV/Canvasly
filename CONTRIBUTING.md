@@ -75,7 +75,7 @@ pnpm --filter @canvasly/web screenshots
 
 For maintainers: update `CHANGELOG.md`, then publish a GitHub Release with a tag like `v1.2.0`. That runs
 [`release.yml`](.github/workflows/release.yml), which publishes the shared library to GitHub Packages at that version and
-attaches it to the release. Pushing to `main` deploys the site separately, once CI passes.
+attaches it to the release. Merging to `main` deploys the site separately. `main` is protected, so every change goes through a pull request and CI has to pass first, for maintainers too.
 
 ## Code of conduct
 
