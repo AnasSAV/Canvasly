@@ -1,13 +1,9 @@
 name: CI
 
 on:
+  # Every pull request runs, docs included: `check` is required to merge into main, and a skipped workflow
+  # never reports it, which would leave the pull request waiting forever.
   pull_request:
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - 'LICENSE'
-      - '.github/ISSUE_TEMPLATE/**'
-      - '.github/*.md'
   push:
     branches: [main]
     paths-ignore:

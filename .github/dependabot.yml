@@ -16,6 +16,9 @@ updates:
       # Pinned: typescript-eslint supports TypeScript below 6.1.
       - dependency-name: typescript
         update-types: [version-update:semver-major, version-update:semver-minor]
+      # Follows the Node version we run on (see .nvmrc), so that types don't promise what isn't there.
+      - dependency-name: '@types/node'
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions
     directory: /
