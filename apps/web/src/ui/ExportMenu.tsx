@@ -1,13 +1,12 @@
-import { Upload } from 'lucide-react';
+import { FileImage, FileInput, FileJson, FileText, ImageDown, Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useBoard } from '../doc/context';
 import { exportJson, exportPdf, exportPng, importJson } from '../lib/exporters';
+import { toastError } from '../state/feedback';
 import { useUI } from '../state/ui';
 import { useViewport } from '../state/viewport';
-import { IconButton, panel } from './IconButton';
-
-const item =
-  'flex w-full items-center px-3 py-1.5 text-left text-sm whitespace-nowrap hover:bg-gray-100 disabled:opacity-40 dark:hover:bg-zinc-800';
+import { IconButton } from './IconButton';
+import { MenuList } from './Menu';
 
 export function ExportMenu({ title }: { title: string }) {
   const board = useBoard();
@@ -31,7 +30,7 @@ export function ExportMenu({ title }: { title: string }) {
     try {
       await fn();
     } catch (e) {
-      alert((e as Error).message);
+      toastError(e);
     } finally {
       setBusy(false);
     }
@@ -41,6 +40,7 @@ export function ExportMenu({ title }: { title: string }) {
     <div className="relative" ref={rootRef}>
       <IconButton
         label="Export / import"
+        aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
         disabled={busy}
         data-testid="export-menu"
@@ -48,38 +48,43 @@ export function ExportMenu({ title }: { title: string }) {
         <Upload size={18} />
       </IconButton>
       {open && (
-        <div className={`${panel} absolute top-12 left-0 z-30 w-56 py-1.5`} role="menu">
-          <button type="button" role="menuitem" className={item} onClick={run(() => exportPng(board, title))}>
-            Board as PNG
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className={item}
-            disabled={!selected.length}
-            onClick={run(() => exportPng(board, title, selected))}
-          >
-            Selection as PNG
-          </button>
-          <button type="button" role="menuitem" className={item} onClick={run(() => exportPdf(board, title))}>
-            PDF (one page per frame)
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className={item}
-            onClick={run(() => exportJson(board, title))}
-          >
-            Board file (.json)
-          </button>
-          {!readOnly && (
-            <>
-              <div className="my-1 h-px bg-gray-200 dark:bg-zinc-700" />
-              <button type="button" role="menuitem" className={item} onClick={() => fileRef.current?.click()}>
-                Import board file…
-              </button>
-            </>
-          )}
+        <div className="absolute top-11 left-0 z-30">
+          <MenuList
+            onClose={() => setOpen(false)}
+            entries={[
+              {
+                label: 'Board as PNG',
+                icon: <FileImage size={15} />,
+                onSelect: () => void run(() => exportPng(board, title))(),
+              },
+              {
+                label: 'Selection as PNG',
+                icon: <ImageDown size={15} />,
+                disabled: !selected.length,
+                onSelect: () => void run(() => exportPng(board, title, selected))(),
+              },
+              {
+                label: 'PDF (one page per frame)',
+                icon: <FileText size={15} />,
+                onSelect: () => void run(() => exportPdf(board, title))(),
+              },
+              {
+                label: 'Board file (.json)',
+                icon: <FileJson size={15} />,
+                onSelect: () => void run(() => exportJson(board, title))(),
+              },
+              ...(readOnly
+                ? []
+                : ([
+                    'divider',
+                    {
+                      label: 'Import board file…',
+                      icon: <FileInput size={15} />,
+                      onSelect: () => fileRef.current?.click(),
+                    },
+                  ] as const)),
+            ]}
+          />
         </div>
       )}
       <input

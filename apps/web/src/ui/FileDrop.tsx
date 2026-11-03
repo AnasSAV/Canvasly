@@ -58,17 +58,30 @@ export function useFileDrop(actions: Actions, canEdit: boolean) {
 export function DropOverlay() {
   return (
     <div
-      className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-indigo-600/10 ring-2 ring-indigo-500/60 ring-inset backdrop-blur-[1px]"
+      className="anim-fade pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-[var(--scrim)]"
       data-testid="drop-overlay"
     >
-      <div className="flex flex-col items-center gap-3 rounded-3xl bg-zinc-900/85 px-12 py-9 text-white shadow-2xl">
-        <p className="text-2xl font-semibold tracking-tight">Release to add it</p>
-        <p className="flex items-center gap-4 text-sm text-white/75">
+      {/* Selection corners around the whole board: it's about to become part of it. */}
+      <div className="absolute inset-5" style={{ animation: 'bracket-in 160ms ease-out' }}>
+        {(
+          [
+            'top-0 left-0 border-t-4 border-l-4 rounded-tl-xl',
+            'top-0 right-0 border-t-4 border-r-4 rounded-tr-xl',
+            'bottom-0 left-0 border-b-4 border-l-4 rounded-bl-xl',
+            'bottom-0 right-0 border-r-4 border-b-4 rounded-br-xl',
+          ] as const
+        ).map((corner) => (
+          <span key={corner} className={`absolute h-16 w-16 border-cta ${corner}`} />
+        ))}
+      </div>
+      <div className="ink panel anim-rise flex flex-col items-center gap-2 px-9 py-6 shadow-pop">
+        <p className="font-display text-xl font-semibold tracking-tight">Release to add it</p>
+        <p className="flex items-center gap-4 text-[13px] text-muted">
           <span className="flex items-center gap-1.5">
-            <FileText size={16} /> PDF
+            <FileText size={15} /> PDF
           </span>
           <span className="flex items-center gap-1.5">
-            <ImageIcon size={16} /> Images
+            <ImageIcon size={15} /> Images
           </span>
         </p>
       </div>
@@ -83,19 +96,19 @@ export function ImportProgress({ actions }: { actions: Actions }) {
   const { name, done, total } = progress;
   return (
     <div
-      className={`${panel} absolute bottom-20 left-1/2 z-40 flex w-80 max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-3 p-3`}
+      className={`${panel} anim-rise absolute bottom-20 left-1/2 z-40 flex w-80 max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-3 p-3`}
       role="status"
       data-testid="import-progress"
     >
-      <FileText size={18} className="shrink-0 text-indigo-600 dark:text-indigo-400" />
+      <FileText size={17} className="shrink-0 text-link" />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{name}</p>
-        <p className="mt-0.5 text-xs text-gray-500 dark:text-zinc-400">
+        <p className="truncate text-[13px] font-semibold">{name}</p>
+        <p className="mt-0.5 text-xs text-muted tabular-nums">
           {total ? `Adding page ${Math.min(done + 1, total)} of ${total}` : 'Opening…'}
         </p>
-        <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-gray-200 dark:bg-zinc-700">
+        <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-line">
           <div
-            className="h-full rounded-full bg-indigo-600 transition-[width]"
+            className="h-full rounded-full bg-cta transition-[width]"
             style={{ width: total ? `${(done / total) * 100}%` : '5%' }}
           />
         </div>
@@ -103,9 +116,9 @@ export function ImportProgress({ actions }: { actions: Actions }) {
       <button
         type="button"
         aria-label="Stop adding this PDF"
-        title="Stop"
+        data-tip="Stop"
         onClick={actions.cancelImport}
-        className="rounded p-1 text-gray-500 hover:bg-gray-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+        className="tile text-muted"
       >
         <X size={16} />
       </button>

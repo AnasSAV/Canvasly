@@ -4,6 +4,7 @@ import { matchBoard, matchShareLink, usePathname } from './lib/router';
 import { AuthPage } from './pages/AuthPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
+import { Loader } from './ui/Logo';
 
 export function App() {
   const { data: session, isPending } = authClient.useSession();
@@ -18,8 +19,8 @@ export function App() {
 
   if (isPending) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-gray-500 dark:bg-zinc-950">
-        Loading…
+      <div className="flex h-full items-center justify-center bg-app">
+        <Loader />
       </div>
     );
   }

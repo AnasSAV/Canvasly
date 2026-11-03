@@ -1,4 +1,9 @@
 /* Self-hosted so fonts need no third-party requests. Browsers download a face only when it is used. */
+/* The interface's own type. Everything below it is for text on boards. */
+@import '@fontsource-variable/instrument-sans/wght.css';
+@import '@fontsource-variable/sora/wght.css';
+@import '@fontsource/jetbrains-mono/latin-500.css';
+
 @import '@fontsource/abril-fatface/latin-400.css';
 @import '@fontsource/bangers/latin-400.css';
 @import '@fontsource/bebas-neue/latin-400.css';

@@ -206,18 +206,18 @@ export function makeTable(at: Vec, z: string, rows = 4, cols = 4): TableObject {
     rows: rowList,
     cells: {},
     headerRow: true,
-    headerFill: '#e8ecff',
+    headerFill: '#d9ecea',
     fontSize: 14,
   };
 }
 
 export const CHART_PALETTE = [
-  '#4262ff',
+  '#0e7c7b',
+  '#f38020',
   '#2fbf71',
-  '#ff9d48',
   '#e8318a',
   '#7048e8',
-  '#0c8599',
+  '#4b9fea',
   '#f5d128',
   '#e03131',
 ];

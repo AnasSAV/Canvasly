@@ -14,20 +14,20 @@ function colorOf(o: BoardObject): string | null {
       return o.color;
     case 'table':
     case 'chart':
-      return '#c5d0ff';
+      return '#a7d3cf';
     case 'pen':
       return o.stroke;
     case 'image':
     case 'pdf':
-      return '#94a3b8';
+      return '#8aa5a3';
     case 'text':
-      return '#9ca3af';
+      return '#86a09f';
     case 'frame':
-      return '#e4e4e7';
+      return '#d8e1df';
     case 'connector':
       return null;
     default:
-      return o.fill === 'transparent' || o.fill === '#ffffff' ? '#cbd5e1' : o.fill;
+      return o.fill === 'transparent' || o.fill === '#ffffff' ? '#b4c4c1' : o.fill;
   }
 }
 
@@ -68,9 +68,9 @@ export function Minimap() {
         ctx.fillStyle = color;
         ctx.fillRect(r.x * scale + ox, r.y * scale + oy, Math.max(1, r.w * scale), Math.max(1, r.h * scale));
       }
-      ctx.strokeStyle = '#4f46e5';
+      ctx.strokeStyle = '#ed5b0f';
       ctx.lineWidth = 1.5;
-      ctx.fillStyle = 'rgba(79,70,229,0.08)';
+      ctx.fillStyle = 'rgba(237,91,15,0.1)';
       const vx = view.x * scale + ox;
       const vy = view.y * scale + oy;
       ctx.fillRect(vx, vy, view.w * scale, view.h * scale);
@@ -91,7 +91,7 @@ export function Minimap() {
   };
 
   return (
-    <div className={`${panel} absolute right-3 bottom-[72px] z-10 hidden overflow-hidden sm:block`}>
+    <div className={`${panel} absolute right-3 bottom-16 z-10 hidden overflow-hidden sm:block`}>
       <canvas
         ref={canvasRef}
         style={{ width: W, height: H }}

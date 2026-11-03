@@ -30,9 +30,9 @@ test('dashboard: create, open, rename and delete a board', async ({ page }) => {
   await expect(page.getByTestId('board-item').getByText('Roadmap')).toBeVisible();
   await expect(card.locator('img')).toBeVisible();
 
-  page.once('dialog', (d) => void d.accept());
   await page.getByRole('button', { name: 'Board options' }).click();
-  await page.getByRole('button', { name: 'Delete' }).click();
+  await page.getByRole('menuitem', { name: 'Delete' }).click();
+  await page.getByTestId('confirm-accept').click();
   await expect(card).toHaveCount(0);
   // The card goes as soon as you confirm; the server catches up a moment later.
   await expect
@@ -89,19 +89,20 @@ test('another user cannot open a board they have no access to', async ({ page, b
 test('signs up and out through the UI', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Sign up' }).click();
-  await page.getByPlaceholder('Your name').fill('UI Person');
-  await page.getByPlaceholder('Email').fill(`ui-${Date.now()}@test.dev`);
-  await page.getByPlaceholder(/Password/).fill('password1234');
+  await page.getByLabel('Name', { exact: true }).fill('UI Person');
+  await page.getByLabel('Email', { exact: true }).fill(`ui-${Date.now()}@test.dev`);
+  await page.getByLabel('Password', { exact: true }).fill('password1234');
   await page.getByRole('button', { name: 'Create account' }).click();
   await expect(page.getByRole('heading', { name: 'Your boards' })).toBeVisible();
-  await page.getByRole('button', { name: 'Sign out' }).click();
+  await page.getByTestId('account-menu').click();
+  await page.getByRole('menuitem', { name: 'Sign out' }).click();
   await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
 });
 
 test('forgot password and reset screens', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Forgot password?' }).click();
-  await page.getByPlaceholder('Email').fill('someone@test.dev');
+  await page.getByLabel('Email', { exact: true }).fill('someone@test.dev');
   await page.getByRole('button', { name: 'Send reset link' }).click();
   // Same answer whether or not the account exists (no account enumeration).
   await expect(page.getByText('If an account exists for someone@test.dev')).toBeVisible();
@@ -109,7 +110,7 @@ test('forgot password and reset screens', async ({ page }) => {
   await page.goto('/reset-password?error=INVALID_TOKEN');
   await expect(page.getByText('This reset link is invalid or has expired.')).toBeVisible();
   await page.goto('/reset-password?token=not-a-real-token');
-  await page.getByPlaceholder('New password').fill('new-password-123');
+  await page.getByLabel('New password', { exact: true }).fill('new-password-123');
   await page.getByRole('button', { name: 'Set password' }).click();
-  await expect(page.locator('p.text-red-600')).toBeVisible();
+  await expect(page.getByTestId('form-error')).toBeVisible();
 });

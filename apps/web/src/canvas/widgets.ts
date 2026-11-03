@@ -42,7 +42,7 @@ export function cellAt(t: TableObject, p: Vec): { rowId: string; colId: string }
 
 export const cellPadding = CELL_PADDING;
 
-const headerFill = (fill: string, dark: boolean) => (dark ? '#2c3358' : fill);
+const headerFill = (fill: string, dark: boolean) => (dark ? '#123f3e' : fill);
 
 export function drawTable(
   ctx: CanvasRenderingContext2D,
@@ -120,8 +120,8 @@ const formatValue = (v: number) =>
 export function drawChart(ctx: CanvasRenderingContext2D, c: ChartObject, opts: { dark: boolean }) {
   const { dark } = opts;
   const text = ink('#1a1a1a', dark);
-  const muted = dark ? '#a1a1aa' : '#71717a';
-  const line = dark ? '#3f3f46' : '#e4e4e7';
+  const muted = dark ? '#9db3b2' : '#5c7877';
+  const line = dark ? '#3c5557' : '#d8e1df';
   ctx.fillStyle = paper('#ffffff', dark);
   ctx.strokeStyle = canvasColors(dark).frameBorder;
   ctx.lineWidth = 1;
@@ -289,7 +289,7 @@ export function drawChart(ctx: CanvasRenderingContext2D, c: ChartObject, opts: {
   }
 }
 
-const SLICE_COLORS = ['#4262ff', '#2fbf71', '#ff9d48', '#e8318a', '#7048e8', '#0c8599', '#f5d128', '#e03131'];
+const SLICE_COLORS = ['#0e7c7b', '#f38020', '#2fbf71', '#e8318a', '#7048e8', '#4b9fea', '#f5d128', '#e03131'];
 
 function sliceColor(c: ChartObject, i: number): string {
   // The series color leads, then the palette, so slices stay distinct.

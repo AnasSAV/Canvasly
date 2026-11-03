@@ -11,7 +11,8 @@ async function inviteFromHome(page: Page, cardTitle: string, email: string, role
   await card.hover();
   await card.getByTestId('board-share').click();
   await page.getByTestId('invite-email').fill(email);
-  await page.getByLabel('Role', { exact: true }).selectOption(role);
+  await page.getByLabel('Role', { exact: true }).click();
+  await page.getByRole('option', { name: role === 'viewer' ? 'Viewer' : 'Editor' }).click();
   await page.getByRole('button', { name: 'Invite' }).click();
   await expect(page.getByTestId('share-message')).toContainText('Added');
 }
@@ -111,9 +112,11 @@ test('filters count and narrow the list; sort and search work; the latest board 
   await expect(titles).toHaveText(['Apple board', 'Zebra board']);
   await expect(page.getByTestId('continue-board')).toContainText('Apple board');
 
-  await page.getByTestId('board-sort').selectOption('name');
+  await page.getByTestId('board-sort').click();
+  await page.getByRole('option', { name: 'Name' }).click();
   await expect(titles).toHaveText(['Apple board', 'Zebra board']);
-  await page.getByTestId('board-sort').selectOption('created');
+  await page.getByTestId('board-sort').click();
+  await page.getByRole('option', { name: 'Date created' }).click();
   await expect(titles).toHaveText(['Apple board', 'Zebra board']);
 
   await page.getByLabel('Search boards').fill('zeb');

@@ -200,11 +200,8 @@ const canvaOf = (...elements: unknown[]) => JSON.stringify({ a: 5, A: elements, 
 test('Canva elements paste in position with their styles, whichever form the clipboard offers', async ({
   page,
 }) => {
-  const dialog = page.waitForEvent('dialog');
   await paste(page, { text: 'plain fallback', html: '<p>html fallback</p>', canva: CANVA });
-  const d = await dialog;
-  expect(d.message()).toContain('1 picture is a gray box');
-  await d.dismiss();
+  await expect(page.getByTestId('toast')).toContainText('1 picture is a gray box');
   await expect.poll(async () => (await all(page)).length).toBe(5);
   expect(await withText(page, 'Picture from Canva')).toMatchObject({ type: 'rect', w: 50, h: 50 });
 
@@ -233,11 +230,9 @@ test('Canva data hidden in the HTML is enough, for when only that form is readab
     const bytes = new Uint8Array(new Uint16Array([...json].map((c) => c.charCodeAt(0))).buffer);
     return btoa(String.fromCharCode(...bytes));
   }, CANVA);
-  const dialog = page.waitForEvent('dialog');
   await paste(page, {
     html: `<div><span data-canva-clipboard="${encoded}"></span><p>html fallback</p></div>`,
   });
-  await (await dialog).dismiss();
   await expect.poll(async () => (await all(page)).length).toBe(5);
   expect(await withText(page, 'LABEL:')).toBeTruthy();
   expect(await withText(page, 'html fallback')).toBeUndefined();
@@ -367,11 +362,8 @@ test('a copied picture uses the image file; text alongside one uses the HTML', a
 });
 
 test('an image its host refuses is reported, and the rest still arrives', async ({ page }) => {
-  const dialog = page.waitForEvent('dialog');
   await paste(page, { html: '<p>Kept</p><img src="https://blocked.invalid/x.png" width="50" height="50">' });
-  const d = await dialog;
-  expect(d.message()).toContain("1 image couldn't be copied");
-  await d.dismiss();
+  await expect(page.getByTestId('toast')).toContainText("1 image couldn't be copied");
   await expect.poll(async () => (await all(page)).map((o) => o.text)).toEqual(['Kept']);
 });
 

@@ -28,6 +28,7 @@ import {
   MoveUpRight,
   Network,
   Pencil,
+  PenTool,
   Plus,
   Redo2,
   Shapes,
@@ -37,7 +38,6 @@ import {
   Table,
   Type,
   Undo2,
-  WandSparkles,
   Workflow,
 } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -49,7 +49,7 @@ import { useBoard } from '../doc/context';
 import { useDrawing, type PresetKind } from '../state/drawing';
 import { useTheme } from '../state/theme';
 import { useUI, type Tool } from '../state/ui';
-import { CustomColor } from './CustomColor';
+import { CustomColor, isFloatingPanel } from './CustomColor';
 import { IconButton, Swatch, panel } from './IconButton';
 import { addStressObjects } from './stress';
 import { TemplatePreview } from './TemplatePreview';
@@ -102,22 +102,15 @@ function PanelItem({
   icon,
   onClick,
   testId,
-  color,
 }: {
   label: string;
   icon: ReactNode;
   onClick: () => void;
   testId?: string;
-  color?: string;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      data-testid={testId}
-      className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-zinc-800"
-    >
-      <span className={color ?? 'text-gray-700 dark:text-zinc-300'}>{icon}</span>
+    <button type="button" onClick={onClick} data-testid={testId} className="menu-row">
+      <span className="text-muted">{icon}</span>
       {label}
     </button>
   );
@@ -141,79 +134,54 @@ function CreatePanel({
     close();
   };
   return (
-    <div className="w-60 p-2" data-testid="create-panel">
+    <div className="w-56 p-1" data-testid="create-panel">
+      <p className="section-label">Data</p>
       <PanelItem
         label="Table"
         icon={<Table size={18} />}
-        color="text-emerald-600"
         testId="create-table"
         onClick={() => {
           actions.insertTable();
           close();
         }}
       />
-      <div className="my-1 h-px bg-gray-200 dark:bg-zinc-700" />
       <PanelItem
         label="Bar chart"
         icon={<ChartColumn size={18} />}
-        color="text-indigo-600"
         testId="create-chart-bar"
         onClick={chart('bar')}
       />
       <PanelItem
         label="Line chart"
         icon={<ChartLine size={18} />}
-        color="text-indigo-600"
         testId="create-chart-line"
         onClick={chart('line')}
       />
       <PanelItem
         label="Area chart"
         icon={<ChartArea size={18} />}
-        color="text-indigo-600"
         testId="create-chart-area"
         onClick={chart('area')}
       />
       <PanelItem
         label="Pie chart"
         icon={<ChartPie size={18} />}
-        color="text-indigo-600"
         testId="create-chart-pie"
         onClick={chart('pie')}
       />
       <PanelItem
         label="Donut chart"
         icon={<Donut size={18} />}
-        color="text-indigo-600"
         testId="create-chart-donut"
         onClick={chart('donut')}
       />
-      <div className="my-1 h-px bg-gray-200 dark:bg-zinc-700" />
-      <PanelItem
-        label="Kanban"
-        icon={<Columns3 size={18} />}
-        color="text-amber-600"
-        onClick={template('kanban')}
-      />
-      <PanelItem
-        label="Timeline"
-        icon={<ChartGantt size={18} />}
-        color="text-amber-600"
-        onClick={template('roadmap')}
-      />
-      <PanelItem
-        label="Flowchart"
-        icon={<Workflow size={18} />}
-        color="text-rose-600"
-        onClick={template('flowchart')}
-      />
-      <PanelItem
-        label="Mind map"
-        icon={<Network size={18} />}
-        color="text-rose-600"
-        onClick={template('mindmap')}
-      />
-      <div className="my-1 h-px bg-gray-200 dark:bg-zinc-700" />
+      <div className="hairline" />
+      <p className="section-label">Diagrams</p>
+      <PanelItem label="Kanban" icon={<Columns3 size={18} />} onClick={template('kanban')} />
+      <PanelItem label="Timeline" icon={<ChartGantt size={18} />} onClick={template('roadmap')} />
+      <PanelItem label="Flowchart" icon={<Workflow size={18} />} onClick={template('flowchart')} />
+      <PanelItem label="Mind map" icon={<Network size={18} />} onClick={template('mindmap')} />
+      <div className="hairline" />
       <PanelItem
         label="Upload image or PDF"
         icon={<ImagePlus size={18} />}
@@ -230,13 +198,13 @@ function CreatePanel({
 function TemplatesPanel({ actions, close }: { actions: Actions; close: () => void }) {
   return (
     <div className="max-h-[70vh] w-[22rem] overflow-y-auto p-3" data-testid="templates-panel">
-      <h3 className="mb-2 text-sm font-semibold">Templates</h3>
+      <h3 className="mb-2.5 text-[13px] font-semibold">Templates</h3>
       <div className="grid grid-cols-2 gap-3">
         {TEMPLATES.filter((t) => t.id !== 'blank').map((t) => (
           <button
             key={t.id}
             type="button"
-            title={t.description}
+            data-tip={t.description}
             onClick={() => {
               actions.insertTemplate(t.id);
               close();
@@ -244,10 +212,10 @@ function TemplatesPanel({ actions, close }: { actions: Actions; close: () => voi
             className="group text-left"
             data-testid={`insert-template-${t.id}`}
           >
-            <span className="block aspect-[4/3] overflow-hidden rounded-lg border border-gray-200 group-hover:border-indigo-400 dark:border-zinc-700">
+            <span className="block aspect-[4/3] overflow-hidden rounded-md border border-line transition-colors duration-100 group-hover:border-teal">
               <TemplatePreview id={t.id} />
             </span>
-            <span className="mt-1 block truncate text-xs font-medium">{t.name}</span>
+            <span className="mt-1 block truncate text-xs font-semibold">{t.name}</span>
           </button>
         ))}
       </div>
@@ -263,43 +231,41 @@ function ShapesPanel({ close }: { close: () => void }) {
     close();
   };
   const cell = (active: boolean) =>
-    `flex h-10 w-10 items-center justify-center rounded-lg ${
-      active
-        ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300'
-        : 'hover:bg-gray-100 dark:hover:bg-zinc-800'
+    `flex h-9 w-9 items-center justify-center rounded-[7px] ${
+      active ? 'bg-teal text-on-teal' : 'hover:bg-hover'
     }`;
   return (
-    <div className="w-56 p-2" data-testid="shapes-panel">
-      <p className="px-1 pb-1 text-xs font-semibold text-gray-500 dark:text-zinc-400">Lines</p>
+    <div className="w-[13.5rem] p-1.5" data-testid="shapes-panel" data-tip-side="top">
+      <p className="section-label px-1!">Lines</p>
       <div className="mb-2 flex gap-0.5">
         <button
           type="button"
-          title="Line (L)"
+          data-tip="Line (L)"
           aria-label="Line"
           className={cell(tool === 'line')}
           onClick={pick('line')}
           data-testid="tool-line"
         >
-          <Minus size={20} className="-rotate-45" />
+          <Minus size={18} className="-rotate-45" />
         </button>
         <button
           type="button"
-          title="Arrow / connector (A)"
+          data-tip="Arrow / connector (A)"
           aria-label="Arrow"
           className={cell(tool === 'arrow')}
           onClick={pick('arrow')}
           data-testid="tool-arrow"
         >
-          <MoveUpRight size={20} />
+          <MoveUpRight size={18} />
         </button>
       </div>
-      <p className="px-1 pb-1 text-xs font-semibold text-gray-500 dark:text-zinc-400">Shapes</p>
+      <p className="section-label px-1!">Shapes</p>
       <div className="grid grid-cols-5 gap-0.5">
         {SHAPE_KINDS.map((k) => (
           <button
             key={k}
             type="button"
-            title={SHAPE_LABELS[k]}
+            data-tip={SHAPE_LABELS[k]}
             aria-label={SHAPE_LABELS[k]}
             className={cell(tool === k)}
             onClick={pick(k)}
@@ -319,7 +285,7 @@ const DRAW_TOOLS: { tool: Tool; label: string; icon: ReactNode; testId: string }
   {
     tool: 'smartpen',
     label: 'Smart drawing: sketches become clean shapes',
-    icon: <WandSparkles size={18} />,
+    icon: <PenTool size={18} />,
     testId: 'tool-smartpen',
   },
   {
@@ -358,9 +324,10 @@ function PenPanel() {
   const current = kind ? presets[kind][active[kind]] : undefined;
   return (
     <div className="flex" data-testid="pen-panel">
-      <div className="flex flex-col items-center gap-0.5 p-1">
+      <div className="flex flex-col items-center gap-px p-1">
         {DRAW_TOOLS.map((t) => (
           <IconButton
+            tool
             key={t.tool}
             label={t.label}
             active={tool === t.tool}
@@ -372,22 +339,20 @@ function PenPanel() {
         ))}
         {kind && current && (
           <>
-            <div className="my-1 h-px w-7 bg-gray-200 dark:bg-zinc-700" />
+            <div className="my-1 h-px w-7 bg-line" />
             {presets[kind].map((p, i) => (
               <button
                 key={i}
                 type="button"
-                title={i === active[kind] ? 'Change color and size' : `${p.color}, size ${p.size}`}
+                data-tip={i === active[kind] ? 'Change color and size' : `Size ${p.size}`}
                 aria-label={`Preset ${i + 1}`}
                 aria-pressed={i === active[kind]}
                 onClick={() => {
                   if (i === active[kind]) setEditing((v) => !v);
                   else setActive(kind, i);
                 }}
-                className={`my-0.5 flex h-8 w-8 items-center justify-center rounded-full border-2 ${
-                  i === active[kind]
-                    ? 'border-indigo-600 dark:border-indigo-400'
-                    : 'border-gray-200 hover:border-gray-400 dark:border-zinc-700'
+                className={`my-0.5 flex h-8 w-8 items-center justify-center rounded-[7px] border-2 ${
+                  i === active[kind] ? 'border-cta' : 'border-line hover:border-line-strong'
                 }`}
                 data-testid={`pen-preset-${i}`}
               >
@@ -409,10 +374,7 @@ function PenPanel() {
         )}
       </div>
       {kind && current && editing && (
-        <div
-          className="flex w-44 flex-col gap-3 border-l border-gray-200 p-2.5 dark:border-zinc-700"
-          data-testid="pen-preset-editor"
-        >
+        <div className="flex w-44 flex-col gap-3 border-l border-line p-2.5" data-testid="pen-preset-editor">
           <div className="grid grid-cols-5 gap-1.5">
             {(kind === 'highlighter' ? HIGHLIGHT_COLORS : STROKE_COLORS).map((c) => (
               <Swatch
@@ -423,15 +385,15 @@ function PenPanel() {
               />
             ))}
           </div>
-          <label className="text-xs font-medium text-gray-500 dark:text-zinc-400">
-            Size: {current.size}
+          <label className="text-xs font-semibold text-muted">
+            Size <span className="num font-normal">{current.size}</span>
             <input
               type="range"
               min={1}
               max={kind === 'highlighter' ? 60 : 40}
               value={current.size}
               onChange={(e) => update(kind, { size: Number(e.target.value) })}
-              className="mt-1 block w-full accent-indigo-600"
+              className="slider mt-1.5"
               data-testid="pen-size"
             />
           </label>
@@ -453,15 +415,15 @@ function MorePanel({
   onImage: () => void;
 }) {
   return (
-    <div className="w-60 p-2" data-testid="more-panel">
-      <p className="px-1 pb-1 text-xs font-semibold text-gray-500 dark:text-zinc-400">Stickers</p>
-      <div className="mb-2 grid grid-cols-8 gap-0.5">
+    <div className="w-56 p-1" data-testid="more-panel">
+      <p className="section-label">Stickers</p>
+      <div className="mb-1 grid grid-cols-8 gap-px px-0.5">
         {STICKERS.map((s) => (
           <button
             key={s}
             type="button"
             aria-label={`Sticker ${s}`}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-base hover:bg-gray-100 dark:hover:bg-zinc-800"
+            className="flex h-[26px] w-[26px] items-center justify-center rounded-md text-[15px] hover:bg-hover"
             onClick={() => {
               actions.insertSticker(s);
               close();
@@ -471,7 +433,7 @@ function MorePanel({
           </button>
         ))}
       </div>
-      <div className="my-1 h-px bg-gray-200 dark:bg-zinc-700" />
+      <div className="hairline" />
       <PanelItem
         label="Upload image or PDF"
         icon={<ImagePlus size={18} />}
@@ -513,7 +475,7 @@ function MorePanel({
 function StickyColors() {
   const { stickyColor, setStickyColor } = useUI();
   return (
-    <div className="grid w-40 grid-cols-4 gap-2 p-2.5" data-testid="sticky-panel">
+    <div className="grid w-max grid-cols-4 gap-2 p-2.5" data-testid="sticky-panel">
       {STICKY_COLORS.map((c) => (
         <Swatch key={c} color={c} active={c === stickyColor} onClick={() => setStickyColor(c)} />
       ))}
@@ -550,7 +512,8 @@ export function Toolbar({ onImage, actions }: { onImage: () => void; actions: Ac
 
   useEffect(() => {
     if (!flyout) return;
-    const close = (e: PointerEvent) => !root.current?.contains(e.target as Node) && setFlyout(null);
+    const close = (e: PointerEvent) =>
+      !root.current?.contains(e.target as Node) && !isFloatingPanel(e.target) && setFlyout(null);
     window.addEventListener('pointerdown', close);
     return () => window.removeEventListener('pointerdown', close);
   }, [flyout]);
@@ -567,73 +530,82 @@ export function Toolbar({ onImage, actions }: { onImage: () => void; actions: Ac
   return (
     <div
       ref={root}
-      className="pointer-events-none absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 flex-col-reverse items-center gap-2 sm:top-[72px] sm:bottom-auto sm:left-3 sm:translate-x-0 sm:flex-row sm:items-start"
+      className="pointer-events-none absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 flex-col-reverse items-center gap-2 sm:top-16 sm:bottom-auto sm:left-3 sm:translate-x-0 sm:flex-row sm:items-start"
     >
       <div className="flex flex-col gap-2">
         <div
-          className={`${panel} pointer-events-auto flex max-w-[calc(100vw-1.5rem)] flex-row gap-0.5 overflow-x-auto p-1 sm:max-h-[calc(100vh-9rem)] sm:flex-col sm:overflow-x-visible sm:overflow-y-auto`}
+          className={`${panel} pointer-events-auto flex max-w-[calc(100vw-1.5rem)] flex-row gap-px overflow-x-auto p-1 sm:max-h-[calc(100vh-9rem)] sm:flex-col sm:overflow-x-visible sm:overflow-y-auto`}
           role="toolbar"
           aria-label="Tools"
+          data-tip-side="right"
         >
           <IconButton
+            tool
             label="Select (V)"
             active={tool === 'select'}
             onClick={choose('select')}
             data-testid="tool-select"
           >
-            <MousePointer2 size={20} />
+            <MousePointer2 size={18} />
           </IconButton>
           <IconButton
+            tool
             label="Hand (H)"
             active={tool === 'hand'}
             onClick={choose('hand')}
             data-testid="tool-hand"
           >
-            <Hand size={20} />
+            <Hand size={18} />
           </IconButton>
           {!readOnly && (
             <>
               <IconButton
+                tool
                 label="Create: tables, charts, diagrams"
                 active={flyout === 'create'}
                 onClick={toggle('create')}
                 data-testid="tool-create"
               >
-                <SquarePlus size={20} />
+                <SquarePlus size={18} />
               </IconButton>
               <IconButton
+                tool
                 label="Templates"
                 active={flyout === 'templates'}
                 onClick={toggle('templates')}
                 data-testid="tool-templates"
               >
-                <LayoutTemplate size={20} />
+                <LayoutTemplate size={18} />
               </IconButton>
               <IconButton
+                tool
                 label="Text (T)"
                 active={tool === 'text'}
                 onClick={choose('text')}
                 data-testid="tool-text"
               >
-                <Type size={20} />
+                <Type size={18} />
               </IconButton>
               <IconButton
+                tool
                 label="Sticky note (N)"
                 active={tool === 'sticky'}
                 onClick={choose('sticky')}
                 data-testid="tool-sticky"
               >
-                <StickyNote size={20} />
+                <StickyNote size={18} />
               </IconButton>
               <IconButton
+                tool
                 label="Shapes and lines"
                 active={shapeActive || flyout === 'shapes'}
                 onClick={toggle('shapes')}
                 data-testid="tool-shapes"
               >
-                <Shapes size={20} />
+                <Shapes size={18} />
               </IconButton>
               <IconButton
+                tool
                 label="Pen (P)"
                 active={penActive}
                 onClick={() => {
@@ -642,58 +614,65 @@ export function Toolbar({ onImage, actions }: { onImage: () => void; actions: Ac
                 }}
                 data-testid="tool-pen"
               >
-                <Pencil size={20} />
+                <Pencil size={18} />
               </IconButton>
               <IconButton
+                tool
                 label="Frame (F)"
                 active={tool === 'frame'}
                 onClick={choose('frame')}
                 data-testid="tool-frame"
               >
-                <Frame size={20} />
+                <Frame size={18} />
               </IconButton>
             </>
           )}
           {!board.anonymous && (
             <IconButton
+              tool
               label="Comment (C)"
               active={tool === 'comment'}
               onClick={choose('comment')}
               data-testid="tool-comment"
             >
-              <MessageSquare size={20} />
+              <MessageSquare size={18} />
             </IconButton>
           )}
           {!readOnly && (
             <IconButton
+              tool
               label="More tools"
               active={flyout === 'more'}
               onClick={toggle('more')}
               data-testid="tool-more"
             >
-              <Plus size={20} />
+              <Plus size={18} />
             </IconButton>
           )}
         </div>
         {!readOnly && (
-          <div className={`${panel} pointer-events-auto hidden flex-col gap-0.5 p-1 sm:flex`}>
+          <div
+            className={`${panel} pointer-events-auto hidden flex-col gap-px p-1 sm:flex`}
+            data-tip-side="right"
+          >
             <IconButton label="Undo (Ctrl Z)" disabled={!canUndo} onClick={actions.undo} data-testid="undo">
-              <Undo2 size={20} />
+              <Undo2 size={18} />
             </IconButton>
             <IconButton
+              tool
               label="Redo (Ctrl Shift Z)"
               disabled={!canRedo}
               onClick={actions.redo}
               data-testid="redo"
             >
-              <Redo2 size={20} />
+              <Redo2 size={18} />
             </IconButton>
           </div>
         )}
       </div>
 
       {(flyout || tool === 'sticky' || penActive) && (
-        <div className={`${panel} pointer-events-auto`}>
+        <div className={`${panel} pop pointer-events-auto`} data-tip-side="right">
           {flyout === 'create' && <CreatePanel actions={actions} close={close} onImage={onImage} />}
           {flyout === 'templates' && <TemplatesPanel actions={actions} close={close} />}
           {flyout === 'shapes' && <ShapesPanel close={close} />}

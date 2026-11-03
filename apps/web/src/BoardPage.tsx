@@ -24,6 +24,7 @@ import { FramesPanel, Presentation } from './ui/Frames';
 import { FollowBanner, RemoteCursors } from './ui/Presence';
 import { DropOverlay, ImportProgress, useFileDrop } from './ui/FileDrop';
 import { LayersPanel } from './ui/Layers';
+import { Loader } from './ui/Logo';
 import { ObjectSizeTag, SelectionToolbar } from './ui/SelectionToolbar';
 import { ShareDialog } from './ui/ShareDialog';
 import { ShortcutsDialog } from './ui/ShortcutsDialog';
@@ -81,14 +82,14 @@ function cachedMeta(id: string): BoardSummary | null {
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 bg-gray-50 text-sm text-gray-500 dark:bg-zinc-950 dark:text-zinc-400">
+    <div className="flex h-full flex-col items-center justify-center gap-3 bg-app text-sm text-muted">
       {children}
     </div>
   );
 }
 
 const backLink = (
-  <Link to="/" className="font-medium text-indigo-600 hover:underline dark:text-indigo-400">
+  <Link to="/" className="text-link">
     Back to your boards
   </Link>
 );
@@ -137,7 +138,12 @@ export function BoardPage({ boardId }: { boardId: string }) {
       </Centered>
     );
   }
-  if (!board || !meta) return <Centered>Loading board…</Centered>;
+  if (!board || !meta)
+    return (
+      <Centered>
+        <Loader label="Loading board…" />
+      </Centered>
+    );
   return (
     <BoardContext value={board}>
       <BoardView
@@ -163,7 +169,12 @@ function PublicBoardPage({ token, meta }: { token: string; meta: BoardSummary })
     user: guest,
     anonymous: true,
   });
-  if (!board) return <Centered>Loading board…</Centered>;
+  if (!board)
+    return (
+      <Centered>
+        <Loader label="Loading board…" />
+      </Centered>
+    );
   return (
     <BoardContext value={board}>
       <BoardView board={board} meta={meta} mode={{ kind: 'public', token }} onMetaChange={() => {}} />
@@ -215,7 +226,11 @@ export function SharedLinkPage({ token }: { token: string }) {
       </Centered>
     );
   }
-  return <Centered>Opening board…</Centered>;
+  return (
+    <Centered>
+      <Loader label="Opening board…" />
+    </Centered>
+  );
 }
 
 function useLiveRole(board: Board, initial: Role): Role {

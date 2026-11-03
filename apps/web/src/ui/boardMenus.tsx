@@ -27,6 +27,7 @@ import { api } from '../lib/api';
 import { exportJson, exportPdf, exportPng } from '../lib/exporters';
 import { navigate } from '../lib/router';
 import { usePrefs } from '../state/prefs';
+import { askConfirm, toastError } from '../state/feedback';
 import { useTheme } from '../state/theme';
 import { useUI } from '../state/ui';
 import { useViewport } from '../state/viewport';
@@ -37,7 +38,6 @@ const MOD = isMac ? '⌘' : 'Ctrl+';
 
 const ui = () => useUI.getState();
 const prefs = () => usePrefs.getState();
-const notify = (e: unknown) => alert((e as Error).message);
 
 /** Copy the selection to the system clipboard from a menu (keyboard copy goes through the copy event). */
 function copyToClipboard(actions: Actions) {
@@ -155,7 +155,7 @@ export function objectContextEntries(board: Board, actions: Actions, title: stri
   const exportItem: MenuEntry = {
     label: 'Export selection as PNG',
     icon: <Download size={15} />,
-    onSelect: () => void exportPng(board, title, ids).catch(notify),
+    onSelect: () => void exportPng(board, title, ids).catch(toastError),
   };
   const copyItem: MenuEntry = {
     label: 'Copy',
@@ -268,14 +268,14 @@ export function boardMenuEntries(
       label: 'Export',
       icon: <Download size={15} />,
       submenu: [
-        { label: 'Board as PNG', onSelect: () => void exportPng(board, title).catch(notify) },
+        { label: 'Board as PNG', onSelect: () => void exportPng(board, title).catch(toastError) },
         {
           label: 'Selection as PNG',
           disabled: !selected.length,
-          onSelect: () => void exportPng(board, title, selected).catch(notify),
+          onSelect: () => void exportPng(board, title, selected).catch(toastError),
         },
-        { label: 'PDF (one page per frame)', onSelect: () => void exportPdf(board, title).catch(notify) },
-        { label: 'Board file (.json)', onSelect: () => void exportJson(board, title).catch(notify) },
+        { label: 'PDF (one page per frame)', onSelect: () => void exportPdf(board, title).catch(toastError) },
+        { label: 'Board file (.json)', onSelect: () => void exportJson(board, title).catch(toastError) },
       ],
     },
     ...(readOnly
@@ -295,9 +295,14 @@ export function boardMenuEntries(
             icon: <Trash size={15} />,
             danger: true,
             onSelect: () => {
-              if (confirm(`Delete “${title}”? This can't be undone.`)) {
-                void api.deleteBoard(meta.id).then(() => navigate('/'), notify);
-              }
+              void askConfirm({
+                title: `Delete “${title}”?`,
+                body: "This removes the board for everyone it's shared with, and can't be undone.",
+                confirmLabel: 'Delete board',
+                danger: true,
+              }).then((ok) => {
+                if (ok) void api.deleteBoard(meta.id).then(() => navigate('/'), toastError);
+              });
             },
           },
         ] as MenuEntry[])

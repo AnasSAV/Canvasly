@@ -1,8 +1,9 @@
 <div align="center">
 
-<img src="docs/assets/logo.svg" width="88" height="88" alt="Canvasly logo">
-
-# Canvasly
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
+  <img src="docs/assets/logo.svg" width="340" alt="Canvasly">
+</picture>
 
 **A real-time collaborative whiteboard that runs entirely on Cloudflare's free plan.**
 
@@ -27,7 +28,7 @@ Infinite canvas, live cursors, offline edits, sharing, PDFs and templates, with 
   without conflicts.
 - **Free to host, for real.** One Worker, one database and one Durable Object per board, all within the Workers Free plan,
   with no payment method on file.
-- **Built to be read.** Strict TypeScript throughout, 201 automated tests, and the reasoning behind each decision written
+- **Built to be read.** Strict TypeScript throughout, 207 automated tests, and the reasoning behind each decision written
   down in the [architecture notes](docs/ARCHITECTURE.md).
 
 ## Features
@@ -49,7 +50,15 @@ Infinite canvas, live cursors, offline edits, sharing, PDFs and templates, with 
 <table>
   <tr>
     <td width="50%"><img src="docs/screenshots/home.png" alt="The home page"><br><b>Home:</b> real numbers, and your latest board one click away</td>
-    <td width="50%"><img src="docs/screenshots/collaboration.png" alt="Another person's cursor and selection on a board"><br><b>Collaboration:</b> live cursors and selections</td>
+    <td width="50%"><img src="docs/screenshots/sign-in.png" alt="The sign-in page, beside a drawing of a board in progress"><br><b>Sign in:</b> email and password, or Google</td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/templates.png" alt="The template gallery for a new board"><br><b>Templates:</b> start blank, or from something laid out</td>
+    <td><img src="docs/screenshots/collaboration.png" alt="Another person's cursor and selection on a board"><br><b>Collaboration:</b> live cursors and selections</td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/share.png" alt="The share dialog"><br><b>Sharing:</b> invites, roles and links</td>
+    <td><img src="docs/screenshots/drop.png" alt="The overlay shown while dragging a file onto a board"><br><b>Files:</b> drag in images and PDFs</td>
   </tr>
   <tr>
     <td><img src="docs/screenshots/layers.png" alt="The layers panel with a group"><br><b>Layers:</b> everything on the board, with collapsible groups</td>

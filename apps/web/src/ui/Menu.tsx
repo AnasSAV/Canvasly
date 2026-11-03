@@ -1,6 +1,5 @@
 import { Check, ChevronRight } from 'lucide-react';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { panel } from './IconButton';
 
 export type MenuEntry =
   | 'divider'
@@ -25,7 +24,7 @@ function Submenu({ entries, onClose }: { entries: MenuEntry[]; onClose: () => vo
     if (r && r.right > window.innerWidth - 8) setLeft(true);
   }, []);
   return (
-    <div ref={ref} className={`absolute -top-1.5 z-10 ${left ? 'right-full mr-1' : 'left-full ml-1'}`}>
+    <div ref={ref} className={`absolute -top-1 z-10 ${left ? 'right-full mr-1' : 'left-full ml-1'}`}>
       <MenuList entries={entries} onClose={onClose} />
     </div>
   );
@@ -37,11 +36,9 @@ export function MenuList({ entries, onClose }: { entries: MenuEntry[]; onClose: 
   const hasChecks = entries.some((e) => e !== 'divider' && e.checked !== undefined);
   const hasIcons = entries.some((e) => e !== 'divider' && e.icon);
   return (
-    <div className={`${panel} w-max min-w-52 py-1.5 text-sm`} role="menu">
+    <div className="panel pop w-max min-w-52 p-1" role="menu">
       {entries.map((e, i) => {
-        if (e === 'divider') {
-          return <div key={i} className="my-1.5 h-px bg-gray-200 dark:bg-zinc-700" />;
-        }
+        if (e === 'divider') return <div key={i} className="hairline" />;
         const open = openIndex === i;
         return (
           <div key={e.label} className="relative" onMouseEnter={() => setOpenIndex(e.submenu ? i : null)}>
@@ -51,6 +48,7 @@ export function MenuList({ entries, onClose }: { entries: MenuEntry[]; onClose: 
               disabled={e.disabled}
               aria-haspopup={e.submenu ? 'menu' : undefined}
               aria-expanded={e.submenu ? open : undefined}
+              data-active={open}
               onClick={() => {
                 if (e.submenu) {
                   setOpenIndex(open ? null : i);
@@ -59,21 +57,17 @@ export function MenuList({ entries, onClose }: { entries: MenuEntry[]; onClose: 
                 onClose();
                 e.onSelect?.();
               }}
-              className={`flex w-full items-center gap-2.5 px-3 py-1.5 text-left whitespace-nowrap hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent dark:hover:bg-zinc-800 ${
-                e.danger ? 'text-red-600 dark:text-red-400' : ''
-              } ${open ? 'bg-gray-100 dark:bg-zinc-800' : ''}`}
+              className={`menu-row ${e.danger ? 'text-danger!' : ''}`}
             >
               {hasChecks && (
-                <span className="flex w-4 justify-center text-indigo-600 dark:text-indigo-400">
-                  {e.checked && <Check size={15} />}
-                </span>
+                <span className="flex w-4 justify-center text-link">{e.checked && <Check size={14} />}</span>
               )}
               {hasIcons && (
-                <span className="flex w-4 justify-center text-gray-600 dark:text-zinc-300">{e.icon}</span>
+                <span className={`flex w-4 justify-center ${e.danger ? '' : 'text-muted'}`}>{e.icon}</span>
               )}
-              <span className="flex-1 pr-6">{e.label}</span>
-              {e.shortcut && <span className="text-xs text-gray-400 dark:text-zinc-500">{e.shortcut}</span>}
-              {e.submenu && <ChevronRight size={15} className="text-gray-500 dark:text-zinc-400" />}
+              <span className="flex-1 pr-5">{e.label}</span>
+              {e.shortcut && <span className="num text-[11px] text-muted">{e.shortcut}</span>}
+              {e.submenu && <ChevronRight size={14} className="text-muted" />}
             </button>
             {e.submenu && open && <Submenu entries={e.submenu} onClose={onClose} />}
           </div>

@@ -1,4 +1,4 @@
-import { TEMPLATES, type BoardListItem, type TemplateId } from '@canvasly/shared';
+import { TEMPLATES, colorForUser, type BoardListItem, type TemplateId } from '@canvasly/shared';
 import {
   ArrowRight,
   Globe,
@@ -16,7 +16,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, thumbnailUrl } from '../lib/api';
 import { authClient, signOut } from '../lib/auth';
 import { Link, navigate } from '../lib/router';
+import { askConfirm } from '../state/feedback';
 import { Logo } from '../ui/Logo';
+import { MenuList } from '../ui/Menu';
+import { Select } from '../ui/Select';
 import { ShareDialog } from '../ui/ShareDialog';
 import { TemplatePicker } from '../ui/TemplatePicker';
 import { TemplatePreview } from '../ui/TemplatePreview';
@@ -53,30 +56,19 @@ function greeting(): string {
 
 const isSharedOut = (b: BoardListItem) => b.role === 'owner' && (b.memberCount > 1 || !!b.linkRole);
 
-const menuItem =
-  'flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-gray-100 dark:hover:bg-zinc-700';
-
-function Thumbnail({ board, large }: { board: BoardListItem; large?: boolean }) {
+function Thumbnail({ board }: { board: BoardListItem }) {
   const thumb = thumbnailUrl(board);
   if (thumb) return <img src={thumb} alt="" className="h-full w-full object-cover" loading="lazy" />;
   return (
-    <div
-      className={`flex h-full items-center justify-center text-gray-400 dark:text-zinc-500 ${
-        large ? 'text-sm' : 'text-xs'
-      }`}
-    >
-      Empty board
-    </div>
+    <div className="dotgrid flex h-full items-center justify-center text-xs text-muted">Empty board</div>
   );
 }
 
 /** Who else can get at a board, in as few words as fit on a card. */
 function SharingBadge({ board }: { board: BoardListItem }) {
-  const badge =
-    'inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600 dark:bg-zinc-800 dark:text-zinc-300';
   if (board.role !== 'owner') {
     return (
-      <span className={badge} data-testid="board-badge">
+      <span className="badge" data-testid="board-badge">
         {board.role === 'viewer' ? 'Can view' : 'Can edit'}
       </span>
     );
@@ -85,17 +77,17 @@ function SharingBadge({ board }: { board: BoardListItem }) {
   return (
     <>
       {others > 0 && (
-        <span className={badge} title={`Shared with ${others}`} data-testid="board-badge">
+        <span className="badge" data-tip={`Shared with ${others}`} data-testid="board-badge">
           <Users size={11} /> {others}
         </span>
       )}
       {board.linkRole === 'viewer' && (
-        <span className={badge} title="Anyone with the link can view" data-testid="board-badge">
+        <span className="badge" data-tip="Anyone with the link can view" data-testid="board-badge">
           <Globe size={11} /> Public
         </span>
       )}
       {board.linkRole === 'editor' && (
-        <span className={badge} title="Anyone signed in with the link can edit" data-testid="board-badge">
+        <span className="badge" data-tip="Anyone signed in with the link can edit" data-testid="board-badge">
           <Link2 size={11} /> Link
         </span>
       )}
@@ -136,12 +128,12 @@ function BoardCard({
 
   return (
     <article
-      className="group relative rounded-2xl bg-white ring-1 ring-black/5 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(5,0,56,0.1)] dark:bg-zinc-900 dark:ring-white/10"
+      className="group relative rounded-[10px] border border-line bg-surface transition-colors duration-100 hover:border-teal focus-within:border-teal"
       data-testid="board-item"
     >
       <Link
         to={`/b/${board.id}`}
-        className="block aspect-[8/5] overflow-hidden rounded-t-2xl bg-gray-50 dark:bg-zinc-800"
+        className="block aspect-[16/10] overflow-hidden rounded-t-[9px] border-b border-line bg-sunken"
         data-testid="board-card"
       >
         <Thumbnail board={board} />
@@ -150,19 +142,21 @@ function BoardCard({
         <button
           type="button"
           onClick={onShare}
-          className="absolute top-2.5 right-2.5 flex items-center gap-1.5 rounded-lg bg-white/95 px-2.5 py-1.5 text-xs font-medium text-gray-800 opacity-0 shadow-sm ring-1 ring-black/5 transition-opacity group-hover:opacity-100 hover:text-indigo-600 focus:opacity-100 dark:bg-zinc-800/95 dark:text-zinc-100 dark:ring-white/10 [@media(hover:none)]:opacity-100"
+          className="btn btn-sm btn-secondary absolute top-2 right-2 opacity-0 shadow-panel transition-opacity group-hover:opacity-100 focus:opacity-100 [@media(hover:none)]:opacity-100"
           data-testid="board-share"
         >
           <UserPlus size={13} /> Share
         </button>
       )}
-      <div className="flex items-start justify-between gap-2 p-3.5">
+      <div className="flex items-start gap-1.5 py-2.5 pr-1.5 pl-3">
         <div className="min-w-0 flex-1">
           {editing ? (
             <input
               autoFocus
               value={title}
+              aria-label="Board name"
               onChange={(e) => setTitle(e.target.value)}
+              onFocus={(e) => e.target.select()}
               onBlur={commit}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') commit();
@@ -171,15 +165,15 @@ function BoardCard({
                   setEditing(false);
                 }
               }}
-              className="w-full rounded border border-indigo-400 px-1 text-sm font-medium outline-none dark:bg-zinc-800"
+              className="field field-sm -ml-1.5"
             />
           ) : (
             <p className="truncate text-sm font-semibold">{board.title}</p>
           )}
-          <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-zinc-400">
+          <p className="mt-0.5 truncate text-xs text-muted">
             {owner ? 'You' : board.ownerName} · {timeAgo(board.updatedAt)}
           </p>
-          <div className="mt-2 flex min-h-5 flex-wrap gap-1 empty:hidden">
+          <div className="mt-1.5 flex flex-wrap gap-1 empty:hidden">
             <SharingBadge board={board} />
           </div>
         </div>
@@ -188,43 +182,35 @@ function BoardCard({
             <button
               type="button"
               aria-label="Board options"
+              aria-expanded={menu}
               onClick={() => setMenu((m) => !m)}
-              className="rounded-md p-1 text-gray-500 hover:bg-gray-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+              className="tile h-8! w-8! text-muted"
             >
               <MoreHorizontal size={16} />
             </button>
             {menu && (
-              <div className="absolute right-0 bottom-8 z-10 w-36 rounded-lg bg-white py-1 shadow-lg ring-1 ring-black/5 dark:bg-zinc-800 dark:ring-white/10">
-                <button
-                  type="button"
-                  className={menuItem}
-                  onClick={() => {
-                    setMenu(false);
-                    onShare();
-                  }}
-                >
-                  <UserPlus size={14} /> Share
-                </button>
-                <button
-                  type="button"
-                  className={menuItem}
-                  onClick={() => {
-                    setMenu(false);
-                    setEditing(true);
-                  }}
-                >
-                  <Pencil size={14} /> Rename
-                </button>
-                <button
-                  type="button"
-                  className={`${menuItem} text-red-600 dark:text-red-400`}
-                  onClick={() => {
-                    setMenu(false);
-                    if (confirm(`Delete “${board.title}”? This can't be undone.`)) onDelete();
-                  }}
-                >
-                  <Trash size={14} /> Delete
-                </button>
+              <div className="absolute right-0 bottom-9 z-10">
+                <MenuList
+                  onClose={() => setMenu(false)}
+                  entries={[
+                    { label: 'Share', icon: <UserPlus size={14} />, onSelect: onShare },
+                    { label: 'Rename', icon: <Pencil size={14} />, onSelect: () => setEditing(true) },
+                    'divider',
+                    {
+                      label: 'Delete',
+                      icon: <Trash size={14} />,
+                      danger: true,
+                      onSelect: () => {
+                        void askConfirm({
+                          title: `Delete “${board.title}”?`,
+                          body: "This removes the board for everyone it's shared with, and can't be undone.",
+                          confirmLabel: 'Delete board',
+                          danger: true,
+                        }).then((ok) => ok && onDelete());
+                      },
+                    },
+                  ]}
+                />
               </div>
             )}
           </div>
@@ -234,19 +220,85 @@ function BoardCard({
   );
 }
 
+function BoardSkeleton() {
+  return (
+    <div className="rounded-[10px] border border-line bg-surface" aria-hidden>
+      <div className="skeleton aspect-[16/10] rounded-b-none" />
+      <div className="p-3">
+        <div className="skeleton h-3.5 w-2/3" />
+        <div className="skeleton mt-2 h-3 w-1/3" />
+      </div>
+    </div>
+  );
+}
+
 function Stat({ value, label, testId }: { value: number; label: string; testId: string }) {
   return (
-    <div>
-      <dd className="text-2xl font-semibold tracking-tight tabular-nums" data-testid={testId}>
+    <div className="flex flex-col-reverse gap-0.5 px-4 py-3">
+      <dt className="text-xs text-muted">{label}</dt>
+      <dd className="font-display text-[22px] leading-none font-semibold tabular-nums" data-testid={testId}>
         {value}
       </dd>
-      <dt className="text-xs text-gray-500 dark:text-zinc-400">{label}</dt>
+    </div>
+  );
+}
+
+function initials(name: string | undefined) {
+  return (name ?? '?')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join('');
+}
+
+/** Who's signed in, and the way out. */
+function AccountMenu({ user }: { user: { id: string; name: string; email: string } | undefined }) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: PointerEvent) => !root.current?.contains(e.target as Node) && setOpen(false);
+    window.addEventListener('pointerdown', close);
+    return () => window.removeEventListener('pointerdown', close);
+  }, [open]);
+  return (
+    <div className="relative" ref={root}>
+      <button
+        type="button"
+        aria-label="Account"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-white"
+        style={{ background: user ? colorForUser(user.id) : undefined }}
+        data-testid="account-menu"
+      >
+        {initials(user?.name)}
+      </button>
+      {open && (
+        <div className="panel pop absolute top-10 right-0 z-30 w-60 p-1">
+          <div className="px-2 py-1.5">
+            <p className="truncate text-[13px] font-semibold">{user?.name}</p>
+            <p className="truncate text-xs text-muted">{user?.email}</p>
+          </div>
+          <div className="hairline" />
+          <button type="button" role="menuitem" className="menu-row" onClick={() => void signOut()}>
+            <LogOut size={14} className="text-muted" /> Sign out
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
 type Filter = 'all' | 'mine' | 'shared';
 type Sort = 'recent' | 'name' | 'created';
+
+const SORTS: { value: Sort; label: string }[] = [
+  { value: 'recent', label: 'Last edited' },
+  { value: 'name', label: 'Name' },
+  { value: 'created', label: 'Date created' },
+];
 
 /** The templates featured at the top; the rest are one click away. */
 const FEATURED: TemplateId[] = ['kanban', 'flowchart', 'mindmap', 'retrospective', 'swot'];
@@ -261,6 +313,7 @@ export function DashboardPage() {
   const [filter, setFilter] = useState<Filter>('all');
   const [sort, setSort] = useState<Sort>('recent');
   const [query, setQuery] = useState('');
+  const search = useRef<HTMLInputElement>(null);
 
   const load = useCallback(() => {
     api
@@ -269,6 +322,18 @@ export function DashboardPage() {
       .catch((e: Error) => setError(e.message));
   }, []);
   useEffect(load, [load]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.ctrlKey || e.metaKey) return;
+      const target = e.target as HTMLElement;
+      if (target.closest('input, textarea, [role="dialog"]')) return;
+      e.preventDefault();
+      search.current?.focus();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const create = async (template: TemplateId) => {
     setCreating(true);
@@ -326,185 +391,190 @@ export function DashboardPage() {
     { id: 'mine', label: 'Owned by me', count: list.length - stats.withYou },
     { id: 'shared', label: 'Shared with me', count: stats.withYou },
   ];
-  const firstName = session?.user.name.split(' ')[0];
+  const user = session?.user;
+  const firstName = user?.name.split(' ')[0];
 
   return (
-    <div className="h-full overflow-y-auto bg-white dark:bg-zinc-950 dark:text-zinc-100">
-      <header className="sticky top-0 z-20 flex h-16 items-center gap-3 bg-white/85 px-5 backdrop-blur-md md:px-8 dark:bg-zinc-950/85">
-        <Logo />
-        <div className="mx-auto flex w-full max-w-sm items-center gap-2 rounded-full bg-gray-100 px-3.5 transition-colors focus-within:bg-gray-200/70 dark:bg-zinc-800/70 dark:focus-within:bg-zinc-800">
-          <Search size={15} className="shrink-0 text-gray-500 dark:text-zinc-400" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search boards"
-            aria-label="Search boards"
-            className="h-9 w-full bg-transparent text-sm outline-none"
-          />
+    <div className="h-full overflow-y-auto bg-app">
+      <header className="sticky top-0 z-20 border-b border-line bg-surface">
+        <div className="mx-auto flex h-14 max-w-[1240px] items-center gap-3 px-4 md:px-8">
+          <span className="hidden sm:block">
+            <Logo />
+          </span>
+          <span className="sm:hidden">
+            <Logo compact />
+          </span>
+          <div className="relative mx-auto w-full max-w-sm">
+            <Search
+              size={15}
+              className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-muted"
+            />
+            <input
+              ref={search}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search boards"
+              aria-label="Search boards"
+              className="field bg-sunken! pr-9 pl-8"
+            />
+            <span className="kbd absolute top-1/2 right-2 hidden -translate-y-1/2 sm:inline-flex">/</span>
+          </div>
+          <ThemeToggle />
+          <AccountMenu user={user} />
         </div>
-        <ThemeToggle />
-        <span className="hidden text-sm whitespace-nowrap text-gray-600 sm:inline dark:text-zinc-300">
-          {session?.user.name}
-        </span>
-        <button
-          type="button"
-          aria-label="Sign out"
-          title="Sign out"
-          onClick={() => void signOut()}
-          className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
-        >
-          <LogOut size={16} />
-        </button>
       </header>
 
-      <main className="mx-auto max-w-6xl px-5 pb-16 md:px-8">
-        <section className="relative mt-2 overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-50 via-white to-sky-50 p-6 ring-1 ring-black/5 md:p-10 dark:from-indigo-500/15 dark:via-zinc-900 dark:to-sky-500/10 dark:ring-white/10">
-          <div className="grid items-center gap-8 lg:grid-cols-[1fr_22rem]">
-            <div>
-              <h2 className="text-3xl font-semibold tracking-tight md:text-4xl" data-testid="greeting">
-                {greeting()}
-                {firstName ? `, ${firstName}` : ''}
-              </h2>
-              <p className="mt-2 max-w-md text-[15px] text-gray-600 dark:text-zinc-300">
-                {boards !== null && stats.total === 0
-                  ? 'Your space is ready. Start with a blank board or a template.'
-                  : 'Everything you and your team are working on, in one place.'}
-              </p>
-              <div className="mt-6 flex flex-wrap gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setPicking(true)}
-                  disabled={creating}
-                  className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:opacity-60"
-                  data-testid="new-board"
-                >
-                  <Plus size={17} /> New board
-                </button>
+      <main className="mx-auto max-w-[1240px] px-4 pb-16 md:px-8">
+        <section className="flex flex-wrap items-end justify-between gap-4 pt-8 pb-5">
+          <div>
+            <h2 className="text-[28px] leading-tight font-semibold" data-testid="greeting">
+              {greeting()}
+              {firstName ? `, ${firstName}` : ''}
+            </h2>
+            <p className="mt-1 text-sm text-muted">
+              {boards !== null && stats.total === 0
+                ? 'Your space is ready. Start with a blank board or a template.'
+                : 'Everything you and your team are working on, in one place.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setPicking(true)}
+            disabled={creating}
+            className="btn btn-primary btn-lg"
+            data-testid="new-board"
+          >
+            <Plus size={17} /> New board
+          </button>
+        </section>
+
+        <section className={`grid gap-4 ${latest ? 'lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]' : ''}`}>
+          {latest && (
+            <Link
+              to={`/b/${latest.id}`}
+              className="group flex overflow-hidden rounded-[10px] border border-line bg-surface transition-colors duration-100 hover:border-teal"
+              data-testid="continue-board"
+            >
+              <div className="w-2/5 min-w-32 shrink-0 overflow-hidden border-r border-line bg-sunken">
+                <Thumbnail board={latest} />
               </div>
-              {stats.total > 0 && (
-                <dl className="mt-8 flex flex-wrap gap-x-10 gap-y-4" data-testid="stats">
-                  <Stat
-                    value={stats.total}
-                    label={stats.total === 1 ? 'Board' : 'Boards'}
-                    testId="stat-total"
-                  />
-                  <Stat value={stats.thisWeek} label="Edited this week" testId="stat-week" />
-                  <Stat value={stats.byYou} label="Shared by you" testId="stat-by-you" />
-                  <Stat value={stats.withYou} label="Shared with you" testId="stat-with-you" />
-                </dl>
-              )}
-            </div>
-            {latest && (
-              <Link
-                to={`/b/${latest.id}`}
-                className="group block overflow-hidden rounded-2xl bg-white shadow-[0_8px_30px_rgba(5,0,56,0.1)] ring-1 ring-black/5 transition-transform duration-150 hover:-translate-y-0.5 dark:bg-zinc-900 dark:ring-white/10"
-                data-testid="continue-board"
-              >
-                <div className="aspect-[8/4.5] overflow-hidden bg-gray-50 dark:bg-zinc-800">
-                  <Thumbnail board={latest} large />
-                </div>
-                <div className="flex items-center gap-2 p-3.5">
+              <div className="flex min-w-0 flex-1 flex-col justify-between gap-5 p-4">
+                <p className="flex items-center gap-1.5 text-xs font-semibold text-accent">
+                  <span className="h-1.5 w-1.5 rounded-full bg-cta" /> Pick up where you left off
+                </p>
+                <div className="flex items-end gap-2">
                   <div className="min-w-0 flex-1">
-                    <p className="text-[11px] font-medium tracking-wide text-indigo-600 uppercase dark:text-indigo-400">
-                      Pick up where you left off
-                    </p>
-                    <p className="mt-0.5 truncate text-sm font-semibold">{latest.title}</p>
-                    <p className="text-xs text-gray-500 dark:text-zinc-400">
-                      Edited {timeAgo(latest.updatedAt)}
-                    </p>
+                    <p className="truncate font-display text-[15px] font-semibold">{latest.title}</p>
+                    <p className="mt-0.5 text-xs text-muted">Edited {timeAgo(latest.updatedAt)}</p>
                   </div>
                   <ArrowRight
-                    size={17}
-                    className="shrink-0 text-gray-400 transition-transform group-hover:translate-x-0.5 group-hover:text-indigo-600"
+                    size={18}
+                    className="shrink-0 text-muted transition-transform duration-100 group-hover:translate-x-0.5 group-hover:text-link"
                   />
                 </div>
-              </Link>
-            )}
-          </div>
-        </section>
+              </div>
+            </Link>
+          )}
 
-        <section className="mt-10" aria-label="Start from a template">
-          <div className="mb-3 flex items-baseline justify-between">
-            <h2 className="text-sm font-semibold">Start from a template</h2>
-            <button
-              type="button"
-              onClick={() => setPicking(true)}
-              className="text-sm text-gray-500 hover:text-indigo-600 dark:text-zinc-400 dark:hover:text-indigo-400"
-            >
-              All {TEMPLATES.length - 1} templates
-            </button>
-          </div>
-          <div className="flex gap-3.5 overflow-x-auto pb-2">
-            {FEATURED.map((id) => (
-              <button
-                key={id}
-                type="button"
-                disabled={creating}
-                onClick={() => void create(id)}
-                className="group w-40 shrink-0 text-left disabled:opacity-60 lg:w-auto lg:flex-1"
-                data-testid={`quick-template-${id}`}
-              >
-                <span className="block aspect-[4/3] w-full overflow-hidden rounded-xl ring-1 ring-black/5 transition-shadow group-hover:shadow-[0_6px_18px_rgba(5,0,56,0.12)] dark:ring-white/10">
-                  <TemplatePreview id={id} />
-                </span>
-                <span className="mt-1.5 block truncate text-[13px] text-gray-700 dark:text-zinc-300">
-                  {TEMPLATES.find((t) => t.id === id)?.name}
-                </span>
+          <div
+            className="min-w-0 rounded-[10px] border border-line bg-surface p-3"
+            aria-label="Start from a template"
+            role="group"
+          >
+            <div className="mb-2 flex items-baseline justify-between px-0.5">
+              <h2 className="font-sans text-[13px] font-semibold tracking-normal">Start from a template</h2>
+              <button type="button" onClick={() => setPicking(true)} className="text-link text-xs">
+                All {TEMPLATES.length - 1} templates
               </button>
-            ))}
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {FEATURED.map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  disabled={creating}
+                  onClick={() => void create(id)}
+                  className="group w-28 shrink-0 text-left disabled:opacity-60 lg:w-auto lg:min-w-0 lg:flex-1"
+                  data-testid={`quick-template-${id}`}
+                >
+                  <span className="block aspect-[4/3] w-full overflow-hidden rounded-md border border-line transition-colors duration-100 group-hover:border-teal">
+                    <TemplatePreview id={id} />
+                  </span>
+                  <span className="mt-1 block truncate text-xs text-muted group-hover:text-fg">
+                    {TEMPLATES.find((t) => t.id === id)?.name}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
         </section>
 
-        <section className="mt-10">
-          <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-3">
-            <h1 className="text-lg font-semibold tracking-tight">Your boards</h1>
-            <div className="flex gap-1" role="group" aria-label="Filter boards">
+        {stats.total > 0 && (
+          <dl
+            className="mt-4 grid grid-cols-2 divide-line rounded-[10px] border border-line bg-surface sm:grid-cols-4 sm:divide-x"
+            data-testid="stats"
+          >
+            <Stat value={stats.total} label={stats.total === 1 ? 'Board' : 'Boards'} testId="stat-total" />
+            <Stat value={stats.thisWeek} label="Edited this week" testId="stat-week" />
+            <Stat value={stats.byYou} label="Shared by you" testId="stat-by-you" />
+            <Stat value={stats.withYou} label="Shared with you" testId="stat-with-you" />
+          </dl>
+        )}
+
+        <section className="mt-9">
+          <div className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-line">
+            <h1 className="pb-2 text-lg font-semibold">Your boards</h1>
+            <div className="flex gap-4" role="group" aria-label="Filter boards">
               {tabs.map((t) => (
                 <button
                   key={t.id}
                   type="button"
                   aria-pressed={filter === t.id}
                   onClick={() => setFilter(t.id)}
-                  className={`rounded-full px-3 py-1 text-[13px] transition-colors ${
-                    filter === t.id
-                      ? 'bg-gray-900 font-medium text-white dark:bg-zinc-100 dark:text-zinc-900'
-                      : 'text-gray-600 hover:bg-gray-100 dark:text-zinc-300 dark:hover:bg-zinc-800'
+                  className={`-mb-px border-b-2 pb-2.5 text-[13px] font-medium transition-colors duration-100 ${
+                    filter === t.id ? 'border-cta text-fg' : 'border-transparent text-muted hover:text-fg'
                   }`}
                   data-testid={`filter-${t.id}`}
                 >
-                  {t.label} <span className="opacity-60">{t.count}</span>
+                  {t.label} <span className="num ml-0.5 text-[11px] text-muted">{t.count}</span>
                 </button>
               ))}
             </div>
-            <label className="ml-auto flex items-center gap-1.5 text-[13px] text-gray-500 dark:text-zinc-400">
-              Sort by
-              <select
+            <div className="mb-1.5 ml-auto">
+              <Select
+                small
+                label="Sort boards"
                 value={sort}
-                onChange={(e) => setSort(e.target.value as Sort)}
-                className="rounded-md bg-transparent py-1 font-medium text-gray-800 outline-none dark:text-zinc-200"
-                data-testid="board-sort"
-              >
-                <option value="recent">Last edited</option>
-                <option value="name">Name</option>
-                <option value="created">Date created</option>
-              </select>
-            </label>
+                options={SORTS}
+                onChange={setSort}
+                testId="board-sort"
+                className="min-w-32"
+              />
+            </div>
           </div>
           {error && (
-            <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-300">
+            <p role="alert" className="mb-4 rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger">
               {error}
             </p>
           )}
           {boards === null ? (
-            <p className="text-sm text-gray-500 dark:text-zinc-400">Loading…</p>
+            <div
+              className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+              aria-busy="true"
+              aria-label="Loading boards"
+            >
+              {[0, 1, 2, 3].map((i) => (
+                <BoardSkeleton key={i} />
+              ))}
+            </div>
           ) : visible.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-gray-300 py-14 text-center dark:border-zinc-700">
-              <p className="text-sm text-gray-600 dark:text-zinc-300">
+            <div className="dotgrid rounded-[10px] border border-dashed border-line-strong py-16 text-center">
+              <p className="text-sm text-muted">
                 {boards.length === 0 ? 'No boards yet. Pick a template above to start.' : 'No boards match.'}
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {visible.map((b) => (
                 <BoardCard
                   key={b.id}

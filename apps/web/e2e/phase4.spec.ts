@@ -31,7 +31,8 @@ test('sharing: invite a viewer, upgrade to editor live, then remove', async ({ b
   // Invite the existing account as a viewer through the share dialog.
   await owner.getByTestId('share-button').click();
   await owner.getByTestId('invite-email').fill(guestUser.email);
-  await owner.getByLabel('Role', { exact: true }).selectOption('viewer');
+  await owner.getByLabel('Role', { exact: true }).click();
+  await owner.getByRole('option', { name: 'Viewer' }).click();
   await owner.getByRole('button', { name: 'Invite' }).click();
   await expect(owner.getByTestId('share-message')).toContainText(`Added ${guestUser.name}`);
 
@@ -51,7 +52,8 @@ test('sharing: invite a viewer, upgrade to editor live, then remove', async ({ b
   expect(await count(owner)).toBe(1);
 
   // Upgrade to editor: the guest's UI unlocks without a reload, and their edits sync.
-  await owner.getByLabel(`Role for ${guestUser.name}`).selectOption('editor');
+  await owner.getByLabel(`Role for ${guestUser.name}`).click();
+  await owner.getByRole('option', { name: 'Editor' }).click();
   await expect(guest.getByTestId('view-only-badge')).toHaveCount(0);
   await guest.keyboard.press('r');
   await guest.getByTestId('board-canvas').click({ position: { x: 900, y: 650 } });

@@ -1,5 +1,7 @@
 import { aabb, buildTemplate, unionRects, type BoardObject, type TemplateId } from '@canvasly/shared';
 import { memo, useMemo } from 'react';
+import { ink, paper } from '../canvas/colors';
+import { useTheme } from '../state/theme';
 
 const center = (o: BoardObject) => {
   if (o.type === 'connector') return null;
@@ -11,17 +13,18 @@ const layer = (o: BoardObject) => (o.type === 'frame' ? 0 : o.type === 'connecto
 
 /** Miniature of a template, drawn from the same objects the template creates. */
 export const TemplatePreview = memo(function TemplatePreview({ id }: { id: TemplateId }) {
+  const dark = useTheme((s) => s.dark);
   const objects = useMemo(() => buildTemplate(id).sort((a, b) => layer(a) - layer(b)), [id]);
   const bounds = unionRects(objects.filter((o) => o.type !== 'connector').map((o) => aabb(o as never)));
   const byId = new Map(objects.map((o) => [o.id, o]));
   if (!bounds) {
-    return <div className="h-full w-full bg-white dark:bg-zinc-800" />;
+    return <div className="h-full w-full bg-white dark:bg-raised" />;
   }
   const pad = Math.max(bounds.w, bounds.h) * 0.06;
   const viewBox = `${bounds.x - pad} ${bounds.y - pad} ${bounds.w + pad * 2} ${bounds.h + pad * 2}`;
   const unit = Math.max(bounds.w, bounds.h) / 160;
   return (
-    <svg viewBox={viewBox} className="h-full w-full bg-white dark:bg-zinc-800" aria-hidden>
+    <svg viewBox={viewBox} className="h-full w-full bg-white dark:bg-raised" aria-hidden>
       {objects.map((o) => {
         switch (o.type) {
           case 'connector': {
@@ -35,7 +38,7 @@ export const TemplatePreview = memo(function TemplatePreview({ id }: { id: Templ
                 y1={a.y}
                 x2={b.x}
                 y2={b.y}
-                stroke="#868e96"
+                stroke="#7d9694"
                 strokeWidth={unit * 0.8}
               />
             );
@@ -48,8 +51,8 @@ export const TemplatePreview = memo(function TemplatePreview({ id }: { id: Templ
                 y={o.y}
                 width={o.w}
                 height={o.h}
-                fill={o.fill === 'transparent' ? 'none' : o.fill}
-                stroke="#ced4da"
+                fill={o.fill === 'transparent' ? 'none' : paper(o.fill, dark)}
+                stroke="#b4c4c1"
                 strokeWidth={unit * 0.8}
               />
             );
@@ -64,7 +67,7 @@ export const TemplatePreview = memo(function TemplatePreview({ id }: { id: Templ
                 width={o.w * 0.5}
                 height={o.h * 0.6}
                 rx={unit}
-                fill="#343a40"
+                fill={ink('#1a1a1a', dark)}
               />
             );
           case 'table':
@@ -75,8 +78,8 @@ export const TemplatePreview = memo(function TemplatePreview({ id }: { id: Templ
                   y={o.y}
                   width={o.w}
                   height={o.h}
-                  fill="#fff"
-                  stroke="#adb5bd"
+                  fill={paper('#ffffff', dark)}
+                  stroke="#a3b6b3"
                   strokeWidth={unit}
                 />
                 <rect x={o.x} y={o.y} width={o.w} height={o.rows[0]!.h} fill={o.headerFill} />
@@ -91,8 +94,8 @@ export const TemplatePreview = memo(function TemplatePreview({ id }: { id: Templ
                 cy={o.y + o.h / 2}
                 rx={o.w / 2}
                 ry={o.h / 2}
-                fill={o.fill}
-                stroke={o.stroke}
+                fill={paper(o.fill, dark)}
+                stroke={ink(o.stroke, dark)}
                 strokeWidth={unit}
               />
             );
@@ -110,8 +113,8 @@ export const TemplatePreview = memo(function TemplatePreview({ id }: { id: Templ
                 width={o.w}
                 height={o.h}
                 rx={unit * 2}
-                fill={o.fill}
-                stroke={o.stroke}
+                fill={paper(o.fill, dark)}
+                stroke={ink(o.stroke, dark)}
                 strokeWidth={unit}
               />
             );

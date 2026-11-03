@@ -89,12 +89,12 @@ test('fonts: pick one for text, stickies and shapes; the text box refits', async
   await expect.poll(async () => (await first(page, 'rect')).font as unknown as string).toBe('mono');
 });
 
-test('dark mode swaps near-black ink for any shade of black, and leaves other colors alone', async ({
+test('dark mode swaps near-black ink and near-white paper, and leaves other colors alone', async ({
   page,
 }) => {
   const results = await page.evaluate(async (url) => {
-    const { ink } = (await import(/* @vite-ignore */ url)) as typeof ColorsModule;
-    const light = '#e7e7ea';
+    const { ink, paper } = (await import(/* @vite-ignore */ url)) as typeof ColorsModule;
+    const light = '#e4efee';
     return {
       defaultBlack: ink('#1a1a1a', true) === light,
       canvaBlack: ink('#1e1e1e', true) === light,
@@ -103,6 +103,10 @@ test('dark mode swaps near-black ink for any shade of black, and leaves other co
       blue: ink('#4262ff', true),
       lightMode: ink('#1a1a1a', false),
       transparent: ink('transparent', true),
+      offWhiteSwaps:
+        paper('#f4f5f7', true) === paper('#ffffff', true) && paper('#f4f5f7', true) !== '#f4f5f7',
+      paleYellow: paper('#fff9b1', true),
+      paperInLightMode: paper('#f4f5f7', false),
     };
   }, '/src/canvas/colors.ts');
   expect(results).toEqual({
@@ -113,6 +117,9 @@ test('dark mode swaps near-black ink for any shade of black, and leaves other co
     blue: '#4262ff',
     lightMode: '#1a1a1a',
     transparent: 'transparent',
+    offWhiteSwaps: true,
+    paleYellow: '#fff9b1',
+    paperInLightMode: '#f4f5f7',
   });
 });
 
@@ -365,4 +372,84 @@ test('board menu, shortcuts dialog and view toggles', async ({ page }) => {
   await expect(page.getByTestId('quick-template-kanban')).toBeVisible();
   await page.getByLabel('Search boards').fill('no such board');
   await expect(page.getByText('No boards match.')).toBeVisible();
+});
+
+test('tooltips name a tool and its key, and get out of the way once it is used', async ({ page }) => {
+  const tip = page.getByRole('tooltip');
+  await page.getByTestId('tool-sticky').hover();
+  await expect(tip).toContainText('Sticky note');
+  await expect(tip).toContainText('N');
+  await page.getByTestId('tool-sticky').click();
+  await expect(tip).toHaveCount(0);
+});
+
+test('Esc closes a dropdown before the dialog around it, and focus returns afterwards', async ({ page }) => {
+  await page.getByTestId('share-button').click();
+  const dialog = page.getByRole('dialog', { name: 'Share board' });
+  await page.getByLabel('Role', { exact: true }).click();
+  await expect(page.getByRole('listbox')).toBeVisible();
+
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('listbox')).toHaveCount(0);
+  await expect(dialog).toBeVisible();
+
+  // Tab goes round the dialog rather than out to the board behind it.
+  for (let i = 0; i < 12; i++) await page.keyboard.press('Tab');
+  expect(await dialog.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByTestId('share-button')).toBeFocused();
+});
+
+test('a dropdown works from the keyboard', async ({ page }) => {
+  await page.getByTestId('share-button').click();
+  const role = page.getByLabel('Role', { exact: true });
+  await role.focus();
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await expect(role).toContainText('Viewer');
+});
+
+test('the color picker applies its color when a drag ends, as one undo step', async ({ page }) => {
+  await page.keyboard.press('r');
+  await page.getByTestId('board-canvas').click({ position: { x: 600, y: 420 } });
+  await expect.poll(() => types(page)).toContain('rect');
+  const before = (await first(page, 'rect')).fill;
+
+  await page.getByRole('button', { name: 'Fill' }).click();
+  await page.getByTestId('custom-color').click();
+  const area = (await page.getByTestId('color-area').boundingBox())!;
+  await page.mouse.move(area.x + 20, area.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(area.x + area.width - 10, area.y + 30, { steps: 5 });
+  expect((await first(page, 'rect')).fill).toBe(before);
+  await page.mouse.up();
+  await expect.poll(async () => (await first(page, 'rect')).fill).not.toBe(before);
+
+  // The dropdown it opened from stays open, to try another color.
+  await expect(page.getByTestId('custom-color')).toBeVisible();
+
+  await page.getByTestId('undo').click();
+  await expect.poll(async () => (await first(page, 'rect')).fill).toBe(before);
+});
+
+test('deleting a board asks first, in the app, and backing out keeps it', async ({ page }) => {
+  const url = page.url();
+  await page.getByTestId('board-menu').click();
+  await page.getByRole('menuitem', { name: 'Board', exact: true }).hover();
+  await page.getByRole('menuitem', { name: 'Delete board' }).click();
+  const confirm = page.getByTestId('confirm-dialog');
+  await expect(confirm).toContainText("can't be undone");
+  await expect(page.getByTestId('confirm-cancel')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(confirm).toHaveCount(0);
+  await expect(page).toHaveURL(url);
+});
+
+test('the logo on a board goes back to the home page', async ({ page }) => {
+  await page.getByTestId('home-link').click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByTestId('greeting')).toBeVisible();
 });

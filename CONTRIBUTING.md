@@ -54,6 +54,8 @@ The browser tests start their own servers on ports 8788 and 5174, so they won't 
   existing data keeps parsing, and a value this client doesn't recognize should fall back rather than break an object.
 - **Test what you change.** Put logic in `packages/shared` where you can, and unit test it there. Use browser tests for
   behavior people see, and check that a new test fails without your change.
+- **Use the design tokens.** Colors, surfaces and controls are defined once, in `apps/web/src/index.css`, for both themes. Use
+  those names, like `bg-surface` and `btn-primary`, rather than raw colors, and keep text at 4.5:1 contrast or better.
 - **Match the code around you.** ESLint and Prettier handle most of the style. Comments explain why, not what.
 
 ## Commit messages

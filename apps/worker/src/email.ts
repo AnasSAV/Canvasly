@@ -45,12 +45,12 @@ function layout(
   footer: string,
 ) {
   const p = paragraphs.map((t) => `<p style="margin:0 0 16px;line-height:1.5">${t}</p>`).join('');
-  return `<!doctype html><html><body style="margin:0;padding:24px;background:#f4f4f5;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#18181b">
-<div style="max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:32px">
-<div style="font-weight:600;font-size:16px;margin-bottom:24px"><span style="display:inline-block;width:14px;height:14px;border-radius:4px;background:#4f46e5;vertical-align:-2px;margin-right:6px"></span>Canvasly</div>
+  return `<!doctype html><html><body style="margin:0;padding:24px;background:#f2f5f4;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#0b2a2a">
+<div style="max-width:480px;margin:0 auto;background:#fff;border:1px solid #d8e1df;border-radius:10px;padding:32px">
+<div style="font-weight:700;font-size:16px;color:#034d4c;margin-bottom:24px"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#ed5b0f;vertical-align:-1px;margin-right:7px"></span>Canvasly</div>
 <h1 style="font-size:20px;margin:0 0 16px">${heading}</h1>${p}
-<a href="${escapeHtml(action.url)}" style="display:inline-block;background:#4f46e5;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:500">${action.label}</a>
-<p style="margin:24px 0 0;font-size:12px;color:#71717a;line-height:1.5">${footer}</p>
+<a href="${escapeHtml(action.url)}" style="display:inline-block;background:#f38020;color:#0b2a2a;text-decoration:none;padding:10px 18px;border-radius:7px;font-weight:600">${action.label}</a>
+<p style="margin:24px 0 0;font-size:12px;color:#486362;line-height:1.5">${footer}</p>
 </div></body></html>`;
 }
 

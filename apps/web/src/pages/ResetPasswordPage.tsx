@@ -1,10 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { authClient } from '../lib/auth';
 import { navigate } from '../lib/router';
-import { Shell } from './AuthPage';
-
-const input =
-  'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-indigo-500/30';
+import { FormNote, PasswordField, Shell } from './AuthPage';
 
 /** Landing page for the emailed reset link: /reset-password?token=… (or ?error=INVALID_TOKEN). */
 export function ResetPasswordPage() {
@@ -32,15 +29,11 @@ export function ResetPasswordPage() {
   if (done) {
     return (
       <Shell>
-        <h1 className="mb-2 text-xl font-semibold">Password updated</h1>
-        <p className="mb-5 text-sm text-gray-600 dark:text-zinc-300">
+        <h1 className="mb-2 text-2xl font-semibold">Password updated</h1>
+        <p className="mb-6 text-sm text-muted">
           You can now sign in with your new password. Other devices were signed out.
         </p>
-        <button
-          type="button"
-          onClick={toSignIn}
-          className="w-full rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-        >
+        <button type="button" onClick={toSignIn} className="btn btn-primary btn-lg w-full">
           Sign in
         </button>
       </Shell>
@@ -49,35 +42,23 @@ export function ResetPasswordPage() {
 
   return (
     <Shell>
-      <h1 className="mb-1 text-xl font-semibold">Choose a new password</h1>
-      <p className="mb-6 text-sm text-gray-500 dark:text-zinc-400">At least 8 characters.</p>
-      <form onSubmit={submit} className="flex flex-col gap-3">
-        <input
-          className={input}
-          type="password"
-          placeholder="New password"
+      <h1 className="mb-6 text-2xl font-semibold">Choose a new password</h1>
+      <form onSubmit={submit} className="flex flex-col gap-3.5">
+        <PasswordField
+          label="New password"
+          hint="At least 8 characters."
           autoComplete="new-password"
-          required
-          minLength={8}
           disabled={!token}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        <button
-          type="submit"
-          disabled={busy || !token}
-          className="rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
-        >
+        {error && <FormNote kind="error">{error}</FormNote>}
+        <button type="submit" disabled={busy || !token} className="btn btn-primary btn-lg w-full">
           {busy ? 'Please wait…' : 'Set password'}
         </button>
       </form>
-      <p className="mt-5 text-center text-sm">
-        <button
-          type="button"
-          onClick={toSignIn}
-          className="font-medium text-indigo-600 hover:underline dark:text-indigo-400"
-        >
+      <p className="mt-6 text-sm">
+        <button type="button" onClick={toSignIn} className="text-link">
           Back to sign in
         </button>
       </p>

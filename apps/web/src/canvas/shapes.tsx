@@ -21,7 +21,7 @@ import { assetUrl, loadImage, useAssetImage, useDocumentPage } from '../doc/asse
 import { useBoard } from '../doc/context';
 import { useUI } from '../state/ui';
 import { useViewport } from '../state/viewport';
-import { canvasColors, ink, paper } from './colors';
+import { canvasColors, ink, isPaper, paper } from './colors';
 import { freehandPath } from './freehand';
 import { drawLine } from './lineDraw';
 import { traceShape } from './shapePaths';
@@ -107,7 +107,7 @@ const TextNode = ({ o, editing, dark }: { o: TextObject } & DetailProps) => (
         width={o.w + TEXT_BACKGROUND_PADDING * 2}
         height={o.h + TEXT_BACKGROUND_PADDING * 2}
         cornerRadius={3}
-        fill={o.background}
+        fill={paper(o.background, dark)}
         perfectDrawEnabled={false}
       />
     )}
@@ -148,9 +148,8 @@ const Shape = ({ o, editing, lowDetail, dark }: { o: ShapeObject } & DetailProps
   const showText = !editing && !lowDetail && o.text;
   const box = shapeTextBox(o.type, o.w, o.h, SHAPE_PADDING);
   const fontSize = showText ? shapeFontSize(o.text, box, o, o) : 0;
-  // Text on a light custom fill stays dark; on the default (or transparent) fill it follows the theme.
-  const textColor =
-    o.fill === 'transparent' || o.fill.toLowerCase() === '#ffffff' ? ink(o.textColor, dark) : o.textColor;
+  // Text on a light custom fill stays dark; on a plain (or transparent) fill it follows the theme.
+  const textColor = o.fill === 'transparent' || isPaper(o.fill) ? ink(o.textColor, dark) : o.textColor;
   return (
     <Group {...boxGroupProps(o)}>
       <KShape

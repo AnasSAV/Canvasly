@@ -15,7 +15,7 @@ import { deleteObjects, moveTableCell, patch, setCell, textShortcut } from '../d
 import { useTheme } from '../state/theme';
 import { useUI } from '../state/ui';
 import { useViewport } from '../state/viewport';
-import { ink } from './colors';
+import { ink, isPaper } from './colors';
 import {
   FONTS,
   FONT_FAMILY,
@@ -62,10 +62,7 @@ function layout(o: TextBearingObject, dark: boolean) {
         box,
         fontSize: shapeFontSize(o.text, box, o, o),
         align: o.align,
-        color:
-          o.fill === 'transparent' || o.fill.toLowerCase() === '#ffffff'
-            ? ink(o.textColor, dark)
-            : o.textColor,
+        color: o.fill === 'transparent' || isPaper(o.fill) ? ink(o.textColor, dark) : o.textColor,
         center: true,
       };
     }
@@ -185,7 +182,7 @@ export function TextEditor() {
           marginLeft: (align === 'center' ? -slack / 2 : align === 'right' ? -slack : 0) * z,
           textAlign: align as 'left' | 'center' | 'right',
           maxHeight: o.type === 'text' ? undefined : box.h * z,
-          caretColor: '#4262ff',
+          caretColor: '#ed5b0f',
         }}
       />
     </div>
@@ -249,7 +246,7 @@ export function CellEditor() {
           else finish();
         }
       }}
-      className="absolute z-[4] resize-none border-2 border-indigo-600 bg-white outline-none dark:bg-zinc-800"
+      className="absolute z-[4] resize-none border-2 border-(--focus) bg-surface outline-none"
       style={{
         left: pos.x,
         top: pos.y,
@@ -307,7 +304,7 @@ export function LineLabelEditor() {
           finish();
         }
       }}
-      className="absolute -translate-x-1/2 -translate-y-1/2 rounded border border-indigo-400 bg-white px-1 text-center outline-none dark:bg-zinc-800"
+      className="absolute -translate-x-1/2 -translate-y-1/2 rounded border border-(--focus) bg-surface px-1 text-center outline-none"
       style={{
         left: at.x,
         top: at.y,

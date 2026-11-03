@@ -3,7 +3,8 @@ import { Plus, X } from 'lucide-react';
 import { useBoard, useDocVersion } from '../doc/context';
 import { patch } from '../doc/ops';
 import { useUI } from '../state/ui';
-import { panel } from './IconButton';
+import { CustomColor } from './CustomColor';
+import { SidePanel } from './SidePanel';
 
 const KIND_LABELS: Record<ChartKind, string> = {
   bar: 'Bar',
@@ -14,7 +15,7 @@ const KIND_LABELS: Record<ChartKind, string> = {
 };
 
 const cell =
-  'w-full min-w-0 rounded border border-transparent bg-transparent px-1.5 py-1 text-sm outline-none hover:border-gray-300 focus:border-indigo-500 dark:hover:border-zinc-600';
+  'w-full min-w-0 rounded border border-transparent bg-transparent px-1.5 py-1 text-[13px] outline-none hover:border-line-strong focus:border-teal';
 
 /** Side panel for a chart's title, type and data. */
 export function ChartEditor() {
@@ -66,43 +67,38 @@ export function ChartEditor() {
     });
 
   return (
-    <aside
-      className={`${panel} absolute top-[72px] right-3 bottom-16 z-20 flex w-[22rem] max-w-[calc(100%-1.5rem)] flex-col`}
-      data-testid="chart-editor"
+    <SidePanel
+      title="Chart data"
+      width="w-[22rem]"
+      closeLabel="Close chart data"
+      onClose={() => setChartEditor(null)}
+      testId="chart-editor"
     >
-      <div className="flex items-center justify-between border-b border-gray-200 px-3 py-2.5 dark:border-zinc-700">
-        <h2 className="text-sm font-semibold">Chart data</h2>
-        <button
-          type="button"
-          aria-label="Close chart data"
-          onClick={() => setChartEditor(null)}
-          className="rounded p-0.5 hover:bg-gray-100 dark:hover:bg-zinc-800"
-        >
-          <X size={16} />
-        </button>
-      </div>
       <div className="flex flex-col gap-3 overflow-y-auto p-3">
-        <label className="text-xs font-medium text-gray-500 dark:text-zinc-400">
+        <label className="field-label mb-0!">
           Title
           <input
             value={c.title}
             maxLength={120}
             onChange={(e) => update({ title: e.target.value })}
             onKeyDown={(e) => e.stopPropagation()}
-            className="mt-1 w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-900 outline-none focus:border-indigo-500 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+            className="field mt-1.5 font-normal"
             data-testid="chart-title"
           />
         </label>
-        <div className="flex flex-wrap gap-1">
+        <div
+          className="flex overflow-hidden rounded-[7px] border border-line-strong"
+          role="group"
+          aria-label="Chart type"
+        >
           {CHART_KINDS.map((k) => (
             <button
               key={k}
               type="button"
+              aria-pressed={c.chartKind === k}
               onClick={() => update({ chartKind: k })}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium ${
-                c.chartKind === k
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700'
+              className={`h-8 flex-1 border-r border-line-strong text-xs font-semibold last:border-r-0 ${
+                c.chartKind === k ? 'bg-teal text-on-teal' : 'hover:bg-hover'
               }`}
             >
               {KIND_LABELS[k]}
@@ -117,22 +113,17 @@ export function ChartEditor() {
           >
             <thead>
               <tr>
-                <th className="w-16 p-0.5 text-left text-xs font-medium text-gray-500 dark:text-zinc-400">
-                  Label
-                </th>
+                <th className="w-16 p-0.5 text-left text-xs font-semibold text-muted">Label</th>
                 {series.map((s, si) => (
                   <th key={si} className="p-0.5">
                     <div className="flex items-center gap-1">
-                      <input
-                        type="color"
-                        value={s.color.length === 7 ? s.color : '#4262ff'}
-                        aria-label={`Color of ${s.name}`}
-                        onChange={(e) =>
-                          update({
-                            series: c.series.map((x, i) => (i === si ? { ...x, color: e.target.value } : x)),
-                          })
+                      <CustomColor
+                        showValue
+                        value={s.color}
+                        label={`Color of ${s.name}`}
+                        onPick={(color) =>
+                          update({ series: c.series.map((x, i) => (i === si ? { ...x, color } : x)) })
                         }
-                        className="h-5 w-5 shrink-0 cursor-pointer border-0 bg-transparent p-0"
                       />
                       <input
                         value={s.name}
@@ -143,14 +134,14 @@ export function ChartEditor() {
                             series: c.series.map((x, i) => (i === si ? { ...x, name: e.target.value } : x)),
                           })
                         }
-                        className={`${cell} font-medium`}
+                        className={`${cell} font-semibold`}
                       />
                       {!round && c.series.length > 1 && (
                         <button
                           type="button"
                           aria-label={`Remove ${s.name}`}
                           onClick={() => update({ series: c.series.filter((_, i) => i !== si) })}
-                          className="shrink-0 rounded p-0.5 text-gray-400 hover:text-red-600"
+                          className="shrink-0 rounded p-0.5 text-muted hover:text-danger"
                         >
                           <X size={12} />
                         </button>
@@ -163,7 +154,7 @@ export function ChartEditor() {
             </thead>
             <tbody>
               {c.labels.map((label, li) => (
-                <tr key={li} className="border-t border-gray-100 dark:border-zinc-800">
+                <tr key={li} className="border-t border-line">
                   <td className="p-0.5">
                     <input
                       value={label}
@@ -193,7 +184,7 @@ export function ChartEditor() {
                         type="button"
                         aria-label={`Remove ${label}`}
                         onClick={() => removeRow(li)}
-                        className="rounded p-0.5 text-gray-400 hover:text-red-600"
+                        className="rounded p-0.5 text-muted hover:text-danger"
                       >
                         <X size={12} />
                       </button>
@@ -209,7 +200,7 @@ export function ChartEditor() {
             type="button"
             onClick={addRow}
             disabled={c.labels.length >= 60}
-            className="flex items-center gap-1 rounded-md bg-gray-100 px-2 py-1 text-xs font-medium hover:bg-gray-200 disabled:opacity-40 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+            className="btn btn-sm btn-secondary"
           >
             <Plus size={12} /> Row
           </button>
@@ -218,13 +209,13 @@ export function ChartEditor() {
               type="button"
               onClick={addSeries}
               disabled={c.series.length >= 8}
-              className="flex items-center gap-1 rounded-md bg-gray-100 px-2 py-1 text-xs font-medium hover:bg-gray-200 disabled:opacity-40 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+              className="btn btn-sm btn-secondary"
             >
               <Plus size={12} /> Series
             </button>
           )}
         </div>
       </div>
-    </aside>
+    </SidePanel>
   );
 }

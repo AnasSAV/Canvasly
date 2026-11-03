@@ -3,8 +3,25 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!-- The version makes browsers drop the favicon they cached before the redesign. -->
+    <link rel="icon" href="/favicon.svg?v=2" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-32.png?v=2" type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2f5f4" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#091314" />
+    <meta name="description" content="A real-time collaborative whiteboard." />
     <title>Canvasly</title>
+    <style>
+      /* Matches the theme before the app's styles load, so the page doesn't flash white. */
+      html {
+        background: #f2f5f4;
+      }
+      @media (prefers-color-scheme: dark) {
+        html {
+          background: #091314;
+        }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

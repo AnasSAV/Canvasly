@@ -1,12 +1,12 @@
 import { compareZ, fitRect, type FrameObject } from '@canvasly/shared';
-import { ChevronLeft, ChevronRight, Frame as FrameIcon, Play, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Frame as FrameIcon, Play } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { Board } from '../doc/board';
 import { useBoard, useDocVersion } from '../doc/context';
 import { patch } from '../doc/ops';
 import { useUI } from '../state/ui';
 import { useViewport } from '../state/viewport';
-import { panel } from './IconButton';
+import { SidePanel } from './SidePanel';
 
 /** Frames in creation order, which is also presentation order. */
 export function useFrames(board: Board): FrameObject[] {
@@ -30,8 +30,8 @@ function FrameRow({ frame, index }: { frame: FrameObject; index: number }) {
     else setName(frame.name);
   };
   return (
-    <li className="group flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-gray-50 dark:hover:bg-zinc-800">
-      <span className="w-5 text-right text-xs text-gray-400 tabular-nums">{index + 1}</span>
+    <li className="group flex h-8 items-center gap-2 rounded-md pr-1 pl-1.5 hover:bg-hover">
+      <span className="num w-5 text-right text-[11px] text-muted">{index + 1}</span>
       {editing ? (
         <input
           autoFocus
@@ -46,19 +46,19 @@ function FrameRow({ frame, index }: { frame: FrameObject; index: number }) {
               setEditing(false);
             }
           }}
-          className="min-w-0 flex-1 rounded border border-indigo-400 px-1 text-sm outline-none dark:bg-zinc-800"
+          className="field h-6! min-w-0 flex-1 px-1! text-[13px]!"
         />
       ) : (
         <button
           type="button"
-          className="min-w-0 flex-1 truncate text-left text-sm"
+          className="min-w-0 flex-1 truncate text-left text-[13px]"
           onClick={() => {
             const b = board.store.getBounds(frame.id);
             if (b) useViewport.getState().fit(b);
             useUI.getState().select([frame.id]);
           }}
           onDoubleClick={() => !readOnly && setEditing(true)}
-          title={readOnly ? frame.name : 'Click to go there, double-click to rename'}
+          data-tip={readOnly ? frame.name : 'Click to go there, double-click to rename'}
         >
           {frame.name || 'Untitled frame'}
         </button>
@@ -67,7 +67,7 @@ function FrameRow({ frame, index }: { frame: FrameObject; index: number }) {
         type="button"
         aria-label={`Present from ${frame.name}`}
         onClick={() => useUI.getState().setPresenting(index)}
-        className="rounded p-0.5 text-gray-400 opacity-0 group-hover:opacity-100 hover:text-indigo-600"
+        className="rounded p-1 text-muted opacity-0 group-hover:opacity-100 hover:text-link focus:opacity-100"
       >
         <Play size={14} />
       </button>
@@ -81,42 +81,35 @@ export function FramesPanel() {
   const { framesPanel, toggleFramesPanel, setPresenting } = useUI();
   if (!framesPanel) return null;
   return (
-    <aside
-      className={`${panel} absolute top-[72px] right-3 bottom-16 z-20 flex w-72 max-w-[calc(100%-1.5rem)] flex-col`}
-      data-testid="frames-panel"
-    >
-      <div className="flex items-center gap-2 border-b border-gray-200 px-3 py-2.5 dark:border-zinc-700">
-        <FrameIcon size={16} />
-        <h2 className="text-sm font-semibold">Frames</h2>
+    <SidePanel
+      title="Frames"
+      icon={<FrameIcon size={15} />}
+      width="w-72"
+      closeLabel="Close frames"
+      onClose={toggleFramesPanel}
+      testId="frames-panel"
+      actions={
         <button
           type="button"
           disabled={!frames.length}
           onClick={() => setPresenting(0)}
-          className="ml-auto flex items-center gap-1 rounded-md bg-indigo-600 px-2 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-40"
+          className="btn btn-sm btn-primary"
         >
           <Play size={12} /> Present
         </button>
-        <button
-          type="button"
-          aria-label="Close frames"
-          onClick={toggleFramesPanel}
-          className="rounded p-0.5 hover:bg-gray-100 dark:hover:bg-zinc-800"
-        >
-          <X size={16} />
-        </button>
-      </div>
-      <ul className="flex-1 overflow-y-auto p-2" data-testid="frame-list">
+      }
+    >
+      <ul className="flex-1 overflow-y-auto p-1" data-testid="frame-list">
         {frames.length === 0 && (
-          <li className="p-4 text-center text-sm text-gray-500 dark:text-zinc-400">
-            No frames yet. Press <kbd className="rounded border px-1">F</kbd> and drag on the board to add
-            one.
+          <li className="p-5 text-center text-[13px] text-muted">
+            No frames yet. Press <kbd className="kbd">F</kbd> and drag on the board to add one.
           </li>
         )}
         {frames.map((f, i) => (
           <FrameRow key={f.id} frame={f} index={i} />
         ))}
       </ul>
-    </aside>
+    </SidePanel>
   );
 }
 
@@ -169,35 +162,34 @@ export function Presentation() {
   if (!frame) return null;
   return (
     <div
-      className="absolute bottom-4 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/75 px-2 py-1.5 text-sm text-white shadow-lg"
+      className="ink panel anim-rise absolute bottom-4 left-1/2 z-40 flex h-11 -translate-x-1/2 items-center gap-1 px-1 text-[13px]"
       data-testid="presentation-bar"
     >
       <button
         type="button"
         aria-label="Previous frame"
         onClick={() => setPresenting(Math.max(0, index - 1))}
-        className="rounded-full p-1.5 hover:bg-white/15 disabled:opacity-30"
+        className="tile"
         disabled={index === 0}
       >
         <ChevronLeft size={18} />
       </button>
-      <span className="max-w-64 truncate tabular-nums">
-        {index + 1} / {frames.length} · {frame.name}
+      <span className="max-w-64 truncate px-1">
+        <span className="num text-xs text-muted">
+          {index + 1} / {frames.length}
+        </span>{' '}
+        · {frame.name}
       </span>
       <button
         type="button"
         aria-label="Next frame"
         onClick={() => setPresenting(Math.min(frames.length - 1, index + 1))}
-        className="rounded-full p-1.5 hover:bg-white/15 disabled:opacity-30"
+        className="tile"
         disabled={index >= frames.length - 1}
       >
         <ChevronRight size={18} />
       </button>
-      <button
-        type="button"
-        onClick={() => setPresenting(null)}
-        className="ml-1 rounded-full px-3 py-1 text-xs hover:bg-white/15"
-      >
+      <button type="button" onClick={() => setPresenting(null)} className="btn btn-ghost btn-sm ml-1">
         Exit
       </button>
     </div>

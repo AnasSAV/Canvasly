@@ -35,14 +35,14 @@ function useConnectionStatus(board: Board): ConnectionStatus | null {
 }
 
 const STATUS: Record<ConnectionStatus, { color: string; label: string; short: string }> = {
-  online: { color: 'bg-emerald-500', label: 'Saved · connected', short: 'Saved' },
-  connecting: { color: 'bg-amber-400', label: 'Connecting…', short: 'Connecting…' },
+  online: { color: 'bg-success', label: 'Saved · connected', short: 'Saved' },
+  connecting: { color: 'bg-cta animate-pulse', label: 'Connecting…', short: 'Connecting…' },
   offline: {
-    color: 'bg-gray-400',
+    color: 'bg-subtle',
     label: 'Offline · changes are kept on this device and sync when you reconnect',
     short: 'Offline · saved locally',
   },
-  denied: { color: 'bg-red-500', label: 'Access to this board was removed', short: 'No access' },
+  denied: { color: 'bg-danger', label: 'Access to this board was removed', short: 'No access' },
 };
 
 function BoardTitle({ meta, onMetaChange }: { meta: BoardSummary; onMetaChange: (m: BoardSummary) => void }) {
@@ -81,7 +81,7 @@ function BoardTitle({ meta, onMetaChange }: { meta: BoardSummary; onMetaChange: 
             setEditing(false);
           }
         }}
-        className="w-52 rounded-md border border-indigo-400 px-1.5 py-0.5 text-sm font-medium outline-none dark:bg-zinc-800"
+        className="field field-sm w-52 font-semibold"
         data-testid="board-title-input"
       />
     );
@@ -90,9 +90,9 @@ function BoardTitle({ meta, onMetaChange }: { meta: BoardSummary; onMetaChange: 
     <button
       type="button"
       disabled={!editable}
-      title={editable ? 'Rename board' : undefined}
+      data-tip={editable ? 'Rename board' : undefined}
       onClick={() => setEditing(true)}
-      className="max-w-52 truncate rounded-md px-1.5 py-1 text-sm font-medium enabled:hover:bg-gray-100 dark:enabled:hover:bg-zinc-800"
+      className="h-8 max-w-52 truncate rounded-md px-1.5 text-[13px] font-semibold enabled:hover:bg-hover"
       data-testid="board-title"
     >
       {meta.title}
@@ -123,11 +123,11 @@ function Dropdown({
   }, [open]);
   return (
     <div className="relative" ref={root}>
-      <IconButton label={label} active={open} onClick={() => setOpen((o) => !o)} data-testid={testId}>
+      <IconButton label={label} aria-expanded={open} onClick={() => setOpen((o) => !o)} data-testid={testId}>
         {icon}
       </IconButton>
       {open && (
-        <div className="absolute top-12 left-0 z-30">
+        <div className="absolute top-11 left-0 z-30">
           <MenuList entries={entries()} onClose={() => setOpen(false)} />
         </div>
       )}
@@ -188,34 +188,44 @@ export function TopBar({
   return (
     <>
       <div
-        className={`${panel} absolute top-3 left-3 z-30 flex h-12 max-w-[calc(100%-1.5rem)] items-center gap-1 px-1`}
+        className={`${panel} absolute top-3 left-3 z-30 flex h-11 max-w-[calc(100%-1.5rem)] items-center gap-0.5 px-1`}
       >
         <Dropdown label="Main menu" icon={<MenuIcon size={18} />} testId="main-menu" entries={mainMenu} />
-        <span className="mr-1 ml-0.5">
-          <span className="hidden sm:inline">
-            <Logo />
+        <a
+          href="/"
+          aria-label="Home"
+          data-tip="Home"
+          onClick={(e) => {
+            // Leave a new-tab click to the browser.
+            if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+            e.preventDefault();
+            leave('/');
+          }}
+          className="flex h-9 items-center rounded-[7px] px-1 hover:bg-hover"
+          data-testid="home-link"
+        >
+          <span className="hidden sm:block">
+            <Logo height={21} />
           </span>
           <span className="sm:hidden">
-            <Logo compact />
+            <Logo compact height={21} />
           </span>
-        </span>
-        <span className="mx-0.5 hidden h-5 w-px bg-gray-200 sm:block dark:bg-zinc-700" />
+        </a>
+        <span className="mx-1 hidden h-5 w-px bg-line sm:block" />
         {isPublic ? (
-          <span className="max-w-52 truncate px-1.5 text-sm font-medium">{meta.title}</span>
+          <span className="max-w-52 truncate px-1.5 text-[13px] font-semibold">{meta.title}</span>
         ) : (
           <BoardTitle meta={meta} onMetaChange={onMetaChange} />
         )}
         {readOnly && (
-          <span
-            className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-600 dark:bg-zinc-800 dark:text-zinc-300"
-            data-testid="view-only-badge"
-          >
+          <span className="badge shrink-0" data-testid="view-only-badge">
             View only
           </span>
         )}
         {s && (
           <span
-            title={s.label}
+            data-tip={s.label}
+            role="img"
             aria-label={s.label}
             className={`mx-1 h-2 w-2 shrink-0 rounded-full ${s.color}`}
             data-testid="connection-status"
@@ -223,7 +233,7 @@ export function TopBar({
           />
         )}
         {s && (status === 'offline' || status === 'denied') && (
-          <span className="hidden text-xs whitespace-nowrap text-gray-500 sm:inline">{s.short}</span>
+          <span className="hidden text-xs whitespace-nowrap text-muted sm:inline">{s.short}</span>
         )}
         <Dropdown
           label="Board menu"
@@ -234,16 +244,14 @@ export function TopBar({
         <ExportMenu title={meta.title} />
       </div>
 
-      <div
-        className={`${panel} absolute top-[72px] right-3 z-30 flex h-12 items-center gap-0.5 px-1 sm:top-3`}
-      >
+      <div className={`${panel} absolute top-16 right-3 z-30 flex h-11 items-center gap-0.5 px-1 sm:top-3`}>
         <IconButton
           label="Comments"
           active={commentsPanel}
           onClick={() => useUI.getState().toggleCommentsPanel()}
           data-testid="comments-toggle"
         >
-          <MessageSquare size={18} />
+          <MessageSquare size={17} />
         </IconButton>
         <IconButton
           label="Frames"
@@ -251,23 +259,18 @@ export function TopBar({
           onClick={() => useUI.getState().toggleFramesPanel()}
           data-testid="frames-toggle"
         >
-          <FrameIcon size={18} />
+          <FrameIcon size={17} />
         </IconButton>
         <ThemeToggle />
         <span className="hidden md:block">
           <PresenceAvatars />
         </span>
         <IconButton label="Start presentation" onClick={present} data-testid="present">
-          <Play size={18} />
+          <Play size={17} />
         </IconButton>
         {meta.role === 'owner' && !isPublic && (
-          <button
-            type="button"
-            onClick={onShare}
-            className="ml-0.5 flex h-10 items-center gap-1.5 rounded-lg bg-indigo-600 px-3 text-sm font-medium text-white hover:bg-indigo-700"
-            data-testid="share-button"
-          >
-            <UserPlus size={16} /> <span className="hidden sm:inline">Share</span>
+          <button type="button" onClick={onShare} className="btn btn-primary ml-1" data-testid="share-button">
+            <UserPlus size={15} /> <span className="hidden sm:inline">Share</span>
           </button>
         )}
       </div>

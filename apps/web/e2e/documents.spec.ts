@@ -128,16 +128,11 @@ test('dropped images still work, unsupported files are named, and dragging other
     const blob = await new Promise<Blob>((r) => canvas.toBlob((b) => r(b!), 'image/png'));
     return [...new Uint8Array(await blob.arrayBuffer())];
   });
-  // The message blocks the page until it's dismissed, so the drop can't be awaited before that.
-  const dialog = page.waitForEvent('dialog');
-  const dropped = drag(page, 'drop', [
+  await drag(page, 'drop', [
     { name: 'photo.png', mime: 'image/png', bytes: png },
     { name: 'notes.docx', mime: 'application/msword', bytes: [1, 2, 3] },
   ]);
-  const d = await dialog;
-  expect(d.message()).toContain('notes.docx');
-  await d.dismiss();
-  await dropped;
+  await expect(page.getByTestId('toast')).toContainText('notes.docx');
   await expect.poll(async () => (await all(page)).filter((o) => o.type === 'image').length).toBe(1);
 
   // Text or objects dragged around aren't files, so no overlay.
@@ -150,15 +145,12 @@ test('dropped images still work, unsupported files are named, and dragging other
 });
 
 test('a broken PDF is reported, and leaves nothing behind', async ({ page }) => {
-  const dialog = page.waitForEvent('dialog');
   await page.getByTestId('file-input').setInputFiles({
     name: 'broken.pdf',
     mimeType: 'application/pdf',
     buffer: Buffer.from('this is not a pdf'),
   });
-  const d = await dialog;
-  expect(d.message()).toContain("couldn't be read as a PDF");
-  await d.dismiss();
+  await expect(page.getByTestId('toast')).toContainText("couldn't be read as a PDF");
   await expect(page.getByTestId('import-progress')).toHaveCount(0);
   expect(await all(page)).toHaveLength(0);
 });

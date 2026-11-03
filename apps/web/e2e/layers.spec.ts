@@ -92,7 +92,7 @@ test('selecting on the canvas highlights the row and opens a closed group for on
 
   // Clicking a member on the canvas selects the whole group, so the group row lights up and stays closed.
   await page.mouse.click(400, 300);
-  await expect(page.getByTestId('layer-group')).toHaveClass(/bg-indigo-100/);
+  await expect(page.getByTestId('layer-group')).toHaveClass(/bg-selected/);
   await expect(rows).toHaveCount(2);
 
   // Selecting just one of them (through the layers state) reveals it.

@@ -41,7 +41,7 @@ const GREEN = '#d5f692';
 const BLUE = '#a6ccf5';
 const PINK = '#ffcee0';
 const INK = '#1e1e2e';
-const ACCENT = '#4262ff';
+const ACCENT = '#0e7c7b';
 
 const sticky = (x: number, y: number, text: string, color = YELLOW) => ({
   ...makeSticky({ x, y }, z(), color),
@@ -85,8 +85,8 @@ function launchBoard(): BoardObject[] {
     h: 80,
   });
 
-  const research = add(step('rect', 0, 130, 'Research', '#e0e6ff'));
-  const design = add(step('rect', 270, 130, 'Design', '#e0e6ff'));
+  const research = add(step('rect', 0, 130, 'Research', '#d9ecea'));
+  const design = add(step('rect', 270, 130, 'Design', '#d9ecea'));
   const review = add({ ...step('diamond', 540, 118, 'Review', '#fff3bf'), h: 120 });
   const build = add(step('rect', 810, 60, 'Build', '#d3f9d8'));
   const rework = add(step('rect', 810, 200, 'Rework', '#ffe3e3'));
@@ -221,7 +221,7 @@ function samplePdf(): Buffer {
   const sections = ['Overview', 'Market', 'Roadmap', 'Pricing', 'Team', 'Risks'];
   sections.forEach((title, i) => {
     if (i) doc.addPage();
-    doc.setFillColor(66, 98, 255);
+    doc.setFillColor(3, 88, 87);
     doc.rect(0, 0, 600, 90, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(30);
@@ -384,8 +384,8 @@ test('README and docs screenshots', async ({ browser }) => {
   // Connect dots and the line tools.
   const lineBoard = await createBoard(owner.request, 'System map');
   await openBoard(owner, lineBoard);
-  const web = step('rect', -520, -170, 'Web app', '#e0e6ff');
-  const api = step('rect', -90, -170, 'API', '#e0e6ff');
+  const web = step('rect', -520, -170, 'Web app', '#d9ecea');
+  const api = step('rect', -90, -170, 'API', '#d9ecea');
   const db = step('cylinder', 340, -250, 'Database', '#d3f9d8');
   const cache = step('rect', 340, -50, 'Rooms', '#fff3bf');
   const links: BoardObject[] = [
@@ -465,4 +465,16 @@ test('README and docs screenshots', async ({ browser }) => {
   await owner.emulateMedia({ colorScheme: 'dark' });
   await owner.waitForTimeout(400);
   await shot(owner, 'home-dark');
+
+  await owner.emulateMedia({ colorScheme: 'light' });
+  await owner.setViewportSize({ width: 1600, height: 1000 });
+  await owner.getByTestId('new-board').click();
+  await owner.waitForTimeout(400);
+  await shot(owner, 'templates');
+
+  const visitor = await (await browser.newContext({ viewport: { width: 1600, height: 1000 } })).newPage();
+  await visitor.goto('/');
+  await visitor.getByRole('heading', { name: 'Welcome back' }).waitFor();
+  await visitor.waitForTimeout(1600); // the board on the left draws itself in
+  await shot(visitor, 'sign-in');
 });

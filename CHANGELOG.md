@@ -51,6 +51,8 @@ The first public release, and the first version of
 
 **Interface**
 
+- A brand of its own in orange and deep teal, with design tokens for light and dark themes
+- Designed tooltips, dialogs, dropdowns, confirmations, notifications and a color picker in place of the browser's
 - Dark mode, touch and phone support, right-click menus and a shortcuts dialog
 
 **Project**
@@ -68,6 +70,7 @@ These are fixes found while preparing this release.
 - Elbow lines leaving and entering the same side ran back through their own shape
 - Boards made from a template showed as empty on the home page, even after being opened
 - Anyone invited before the share dialog finished loading disappeared from its list
+- Dark text disappeared on off-white frames in dark mode, as only pure white counted as plain paper
 - Double-clicking a line's middle handle could open the label editor if the screen hadn't redrawn yet
 
 [1.0.0]: https://github.com/AnasSAV/Canvasly/releases/tag/v1.0.0

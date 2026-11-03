@@ -1,13 +1,17 @@
-import type { GrantableRole, LinkRole, ShareSettings } from '@canvasly/shared';
-import { Check, Copy, Link2, RefreshCw, X } from 'lucide-react';
+import { colorForUser, type GrantableRole, type LinkRole, type ShareSettings } from '@canvasly/shared';
+import { Check, CircleAlert, CircleCheck, Copy, RefreshCw, X } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, shareLinkUrl } from '../lib/api';
+import { Dialog } from './Dialog';
+import { Select } from './Select';
 
-const select =
-  'rounded-md border border-gray-300 bg-white px-2 py-1 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100';
+const ROLES: { value: GrantableRole; label: string }[] = [
+  { value: 'editor', label: 'Editor' },
+  { value: 'viewer', label: 'Viewer' },
+];
 
 const LINK_OPTIONS: { value: LinkRole; label: string; hint: string }[] = [
-  { value: null, label: 'Off', hint: 'Only people added below can open the board.' },
+  { value: null, label: 'Off', hint: 'Only people added above can open the board.' },
   { value: 'viewer', label: 'Anyone can view', hint: 'Public, view-only. No sign-in needed.' },
   {
     value: 'editor',
@@ -15,6 +19,11 @@ const LINK_OPTIONS: { value: LinkRole; label: string; hint: string }[] = [
     hint: 'Anyone who signs in and opens the link joins as an editor.',
   },
 ];
+
+const initial = (name: string) => name.trim()[0]?.toUpperCase() ?? '?';
+
+const removeButton =
+  'flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-danger-soft hover:text-danger';
 
 export function ShareDialog({ boardId, onClose }: { boardId: string; onClose: () => void }) {
   const [settings, setSettings] = useState<ShareSettings | null>(null);
@@ -31,12 +40,6 @@ export function ShareDialog({ boardId, onClose }: { boardId: string; onClose: ()
       .then((loaded) => setSettings((current) => current ?? loaded))
       .catch((e: Error) => setMessage({ kind: 'error', text: e.message }));
   }, [boardId]);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
 
   const run = async (fn: () => Promise<ShareSettings>) => {
     setBusy(true);
@@ -74,180 +77,178 @@ export function ShareDialog({ boardId, onClose }: { boardId: string; onClose: ()
   };
 
   const link = settings?.linkRole && settings.linkToken ? shareLinkUrl(settings.linkToken) : null;
+  const MessageIcon = message?.kind === 'error' ? CircleAlert : CircleCheck;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 p-4 pt-[10vh]"
-      onPointerDown={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div
-        role="dialog"
-        aria-label="Share board"
-        className="w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-5 shadow-xl dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-        data-testid="share-dialog"
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Share board</h2>
-          <button
-            type="button"
-            aria-label="Close"
-            onClick={onClose}
-            className="rounded-md p-1 hover:bg-gray-100 dark:hover:bg-zinc-800"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <form onSubmit={invite} className="mb-2 flex gap-2">
-          <input
-            type="email"
-            required
-            placeholder="Invite by email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm outline-none focus:border-indigo-500 dark:border-zinc-600 dark:bg-zinc-800"
-            data-testid="invite-email"
-          />
-          <select
-            value={role}
-            onChange={(e) => setRole(e.target.value as GrantableRole)}
-            className={select}
-            aria-label="Role"
-          >
-            <option value="editor">Editor</option>
-            <option value="viewer">Viewer</option>
-          </select>
-          <button
-            type="submit"
-            disabled={busy}
-            className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
-          >
-            Invite
-          </button>
-        </form>
-        {message && (
-          <p
-            className={`mb-3 text-sm ${message.kind === 'error' ? 'text-red-600' : 'text-emerald-700 dark:text-emerald-400'}`}
-            data-testid="share-message"
-          >
-            {message.text}
-          </p>
-        )}
-
-        <h3 className="mt-4 mb-2 text-xs font-semibold tracking-wide text-gray-500 uppercase dark:text-zinc-400">
-          People with access
-        </h3>
-        <ul
-          className="mb-4 max-h-56 divide-y divide-gray-100 overflow-y-auto dark:divide-zinc-800"
-          data-testid="member-list"
+    <Dialog label="Share board" title="Share board" onClose={onClose} testId="share-dialog">
+      <form onSubmit={invite} className="flex flex-wrap gap-2 sm:flex-nowrap">
+        <input
+          type="email"
+          required
+          autoFocus
+          placeholder="Invite by email"
+          aria-label="Invite by email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="field min-w-40 flex-1"
+          data-testid="invite-email"
+        />
+        <Select label="Role" value={role} options={ROLES} onChange={setRole} className="w-28" />
+        <button type="submit" disabled={busy} className="btn btn-primary">
+          Invite
+        </button>
+      </form>
+      {message && (
+        <p
+          className={`mt-2 flex items-start gap-1.5 text-[13px] leading-snug ${message.kind === 'error' ? 'text-danger' : 'text-success'}`}
+          data-testid="share-message"
         >
-          {settings?.members.map((m) => (
-            <li key={m.userId} className="flex items-center gap-3 py-2">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{m.name}</p>
-                <p className="truncate text-xs text-gray-500 dark:text-zinc-400">{m.email}</p>
-              </div>
-              {m.role === 'owner' ? (
-                <span className="text-sm text-gray-500 dark:text-zinc-400">Owner</span>
-              ) : (
-                <>
-                  <select
-                    value={m.role}
-                    aria-label={`Role for ${m.name}`}
-                    className={select}
-                    onChange={(e) =>
-                      void run(() => api.setMemberRole(boardId, m.userId, e.target.value as GrantableRole))
-                    }
-                  >
-                    <option value="editor">Editor</option>
-                    <option value="viewer">Viewer</option>
-                  </select>
-                  <button
-                    type="button"
-                    aria-label={`Remove ${m.name}`}
-                    onClick={() => void run(() => api.removeMember(boardId, m.userId))}
-                    className="rounded-md p-1 text-gray-500 hover:bg-gray-100 hover:text-red-600 dark:hover:bg-zinc-800"
-                  >
-                    <X size={16} />
-                  </button>
-                </>
-              )}
-            </li>
-          ))}
-          {settings?.invites.map((inv) => (
-            <li key={inv.email} className="flex items-center gap-3 py-2">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm">{inv.email}</p>
-                <p className="text-xs text-gray-500 dark:text-zinc-400">
-                  Invited · {inv.role} · waiting for sign-up
-                </p>
-              </div>
-              <button
-                type="button"
-                aria-label={`Cancel invite for ${inv.email}`}
-                onClick={() => void run(() => api.cancelInvite(boardId, inv.email))}
-                className="rounded-md p-1 text-gray-500 hover:bg-gray-100 hover:text-red-600 dark:hover:bg-zinc-800"
-              >
-                <X size={16} />
-              </button>
-            </li>
-          ))}
-        </ul>
+          <MessageIcon size={14} className="mt-0.5 shrink-0" aria-hidden />
+          <span>{message.text}</span>
+        </p>
+      )}
 
-        <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold tracking-wide text-gray-500 uppercase dark:text-zinc-400">
-          <Link2 size={14} /> Link access
-        </h3>
-        <div className="flex flex-col gap-1">
-          {LINK_OPTIONS.map((o) => (
+      <h3 className="mt-5 mb-1 text-xs font-semibold text-muted">People with access</h3>
+      <ul className="max-h-56 overflow-y-auto" data-testid="member-list">
+        {!settings && (
+          <li className="flex items-center gap-2.5 py-2" aria-hidden>
+            <span className="skeleton h-7 w-7 rounded-full!" />
+            <span className="skeleton h-3.5 w-40" />
+          </li>
+        )}
+        {settings?.members.map((m) => (
+          <li key={m.userId} className="flex items-center gap-2.5 border-b border-line py-2 last:border-0">
+            <span
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-white"
+              style={{ background: colorForUser(m.userId) }}
+              aria-hidden
+            >
+              {initial(m.name)}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[13px] font-semibold">{m.name}</p>
+              <p className="truncate text-xs text-muted">{m.email}</p>
+            </div>
+            {m.role === 'owner' ? (
+              <span className="badge mr-1">Owner</span>
+            ) : (
+              <>
+                <Select
+                  small
+                  label={`Role for ${m.name}`}
+                  value={m.role}
+                  options={ROLES}
+                  onChange={(next) => void run(() => api.setMemberRole(boardId, m.userId, next))}
+                  className="w-24"
+                />
+                <button
+                  type="button"
+                  aria-label={`Remove ${m.name}`}
+                  data-tip="Remove"
+                  onClick={() => void run(() => api.removeMember(boardId, m.userId))}
+                  className={removeButton}
+                >
+                  <X size={15} />
+                </button>
+              </>
+            )}
+          </li>
+        ))}
+        {settings?.invites.map((inv) => (
+          <li key={inv.email} className="flex items-center gap-2.5 border-b border-line py-2 last:border-0">
+            <span
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-dashed border-line-strong text-[11px] font-semibold text-muted"
+              aria-hidden
+            >
+              {initial(inv.email)}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[13px]">{inv.email}</p>
+              <p className="text-xs text-muted">Invited · {inv.role} · waiting for sign-up</p>
+            </div>
+            <button
+              type="button"
+              aria-label={`Cancel invite for ${inv.email}`}
+              data-tip="Cancel invite"
+              onClick={() => void run(() => api.cancelInvite(boardId, inv.email))}
+              className={removeButton}
+            >
+              <X size={15} />
+            </button>
+          </li>
+        ))}
+      </ul>
+
+      <h3 className="mt-5 mb-2 text-xs font-semibold text-muted">Link access</h3>
+      <div className="overflow-hidden rounded-lg border border-line">
+        {LINK_OPTIONS.map((o) => {
+          const checked = (settings?.linkRole ?? null) === o.value;
+          return (
             <label
               key={String(o.value)}
-              className="flex cursor-pointer items-start gap-2 rounded-lg p-1.5 hover:bg-gray-50 dark:hover:bg-zinc-800"
+              className={`relative flex cursor-pointer items-start gap-2.5 border-b border-line px-3 py-2 last:border-0 ${
+                checked ? 'bg-selected' : 'hover:bg-hover'
+              }`}
             >
               <input
                 type="radio"
                 name="link"
-                className="mt-1"
-                checked={(settings?.linkRole ?? null) === o.value}
+                className="peer absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                checked={checked}
                 onChange={() => void run(() => api.setLink(boardId, o.value))}
               />
+              <span
+                className={`mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-(--focus) ${
+                  checked ? 'border-teal bg-teal' : 'border-line-strong bg-surface'
+                }`}
+                aria-hidden
+              >
+                {checked && <span className="h-1.5 w-1.5 rounded-full bg-on-teal" />}
+              </span>
               <span>
-                <span className="block text-sm font-medium">{o.label}</span>
-                <span className="block text-xs text-gray-500 dark:text-zinc-400">{o.hint}</span>
+                <span className={`block text-[13px] font-semibold ${checked ? 'text-on-selected' : ''}`}>
+                  {o.label}
+                </span>
+                <span className={`block text-xs ${checked ? 'text-on-selected' : 'text-muted'}`}>
+                  {o.hint}
+                </span>
               </span>
             </label>
-          ))}
-        </div>
-        {link && (
-          <div className="mt-3 flex items-center gap-2">
-            <input
-              readOnly
-              value={link}
-              className="min-w-0 flex-1 rounded-lg border border-gray-300 bg-gray-50 px-2 py-1.5 text-xs dark:border-zinc-600 dark:bg-zinc-800"
-              data-testid="share-link"
-            />
-            <button
-              type="button"
-              onClick={() => {
-                void navigator.clipboard?.writeText(link);
-                setCopied(true);
-                setTimeout(() => setCopied(false), 1500);
-              }}
-              className="flex items-center gap-1 rounded-lg border border-gray-300 px-2 py-1.5 text-xs hover:bg-gray-50 dark:border-zinc-600 dark:hover:bg-zinc-800"
-            >
-              {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Copied' : 'Copy'}
-            </button>
-            <button
-              type="button"
-              title="Create a new link (the old one stops working)"
-              aria-label="Reset link"
-              onClick={() => void run(() => api.rotateLink(boardId))}
-              className="rounded-lg border border-gray-300 p-1.5 hover:bg-gray-50 dark:border-zinc-600 dark:hover:bg-zinc-800"
-            >
-              <RefreshCw size={14} />
-            </button>
-          </div>
-        )}
+          );
+        })}
       </div>
-    </div>
+      {link && (
+        <div className="mt-2.5 flex items-center gap-1.5">
+          <input
+            readOnly
+            value={link}
+            aria-label="Share link"
+            onFocus={(e) => e.target.select()}
+            className="field num bg-sunken! text-xs!"
+            data-testid="share-link"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              void navigator.clipboard?.writeText(link);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1500);
+            }}
+            className="btn btn-secondary w-24"
+          >
+            {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Copied' : 'Copy'}
+          </button>
+          <button
+            type="button"
+            data-tip="Create a new link. The old one stops working."
+            aria-label="Reset link"
+            onClick={() => void run(() => api.rotateLink(boardId))}
+            className="btn btn-secondary w-9 px-0!"
+          >
+            <RefreshCw size={14} />
+          </button>
+        </div>
+      )}
+    </Dialog>
   );
 }

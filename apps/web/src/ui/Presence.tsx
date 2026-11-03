@@ -40,7 +40,7 @@ export function RemoteCursors() {
               <path d="M1 1 L1 15 L5 11 L8 17 L10.5 16 L7.5 10 L13 10 Z" fill={p.user.color} stroke="#fff" />
             </svg>
             <span
-              className="absolute top-4 left-3 rounded-md px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap text-white shadow-sm"
+              className="absolute top-4 left-3 rounded px-1.5 py-0.5 text-[11px] font-semibold whitespace-nowrap text-white"
               style={{ background: p.user.color }}
             >
               {p.user.name}
@@ -68,12 +68,12 @@ function Avatar({
   return (
     <button
       type="button"
-      title={title}
+      data-tip={title}
       aria-label={title}
       aria-pressed={active}
       onClick={onClick}
       disabled={!onClick}
-      className={`-ml-1.5 flex h-8 w-8 items-center justify-center rounded-full border-2 border-white text-xs font-semibold text-white first:ml-0 enabled:hover:z-10 enabled:hover:scale-110 ${
+      className={`-ml-1.5 flex h-7 w-7 items-center justify-center rounded-full border-2 border-surface text-[11px] font-semibold text-white transition-transform duration-100 first:ml-0 enabled:hover:z-10 enabled:hover:scale-110 ${
         active ? 'ring-2 ring-offset-1' : ''
       }`}
       style={{ background: color, ['--tw-ring-color' as string]: color }}
@@ -122,7 +122,7 @@ export function PresenceAvatars() {
         );
       })}
       {others.length > shown.length && (
-        <span className="ml-1 text-xs text-gray-500">+{others.length - shown.length}</span>
+        <span className="num ml-1 text-xs text-muted">+{others.length - shown.length}</span>
       )}
     </div>
   );
@@ -143,14 +143,14 @@ export function FollowBanner() {
         style={{ borderColor: peer.user.color }}
       />
       <div
-        className="absolute top-3 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium text-white shadow"
+        className="anim-rise absolute top-3 left-1/2 z-30 flex h-9 -translate-x-1/2 items-center gap-2 rounded-lg pr-1 pl-3 text-[13px] font-semibold text-white shadow-pop"
         style={{ background: peer.user.color }}
         data-testid="follow-banner"
       >
         Following {peer.user.name}
         <button
           type="button"
-          className="rounded-full bg-white/25 px-2 py-0.5 text-xs hover:bg-white/40"
+          className="h-7 rounded-md bg-white/20 px-2 text-xs hover:bg-white/35"
           onClick={() => setFollowing(null)}
         >
           Stop

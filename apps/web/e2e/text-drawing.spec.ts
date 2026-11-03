@@ -4,6 +4,12 @@ import { createBoard, openBoard, signUp } from './helpers';
 
 type Obj = Record<string, unknown> & { id: string; type: string };
 
+async function customColor(page: Page, hex: string) {
+  await page.getByTestId('custom-color').click();
+  await page.getByTestId('custom-color-hex').fill(hex);
+  await page.getByTestId('custom-color-hex').press('Enter');
+}
+
 const all = (page: Page) =>
   page.evaluate(() => [...window.__canvasly!.store.all()] as unknown as Record<string, unknown>[]) as Promise<
     Obj[]
@@ -77,10 +83,10 @@ test('text toolbar: format, align, size, colors and custom color', async ({ page
 
   // Any color through the custom picker.
   await page.getByRole('button', { name: 'Text color' }).click();
-  await page.getByTestId('custom-color').fill('#12ab34');
+  await customColor(page, '#12ab34');
   await expect.poll(async () => (await first(page, 'text')).color).toBe('#12ab34');
-  await page.getByTitle('Background').getByRole('button').click();
-  await page.getByTestId('custom-color').fill('#fedcba');
+  await page.getByRole('button', { name: 'Background' }).click();
+  await customColor(page, '#fedcba');
   await expect.poll(async () => (await first(page, 'text')).background).toBe('#fedcba');
 });
 
@@ -170,7 +176,7 @@ test('pen presets: pick one, and set a custom color and size', async ({ page }) 
   ]);
   await expect.poll(async () => (await first(page, 'pen')).stroke).toBe('#e03131');
 
-  await page.getByTestId('pen-panel').getByTestId('custom-color').fill('#7048e8');
+  await customColor(page, '#7048e8');
   await page.getByTestId('pen-preset-1').click(); // the active preset opens its editor
   await page.getByTestId('pen-size').fill('20');
   await draw(page, [

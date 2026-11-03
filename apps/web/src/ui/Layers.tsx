@@ -38,7 +38,7 @@ import { useBoard, useDocVersion } from '../doc/context';
 import { toggleLock, ungroup } from '../doc/ops';
 import { useUI } from '../state/ui';
 import { useViewport } from '../state/viewport';
-import { panel } from './IconButton';
+import { SidePanel } from './SidePanel';
 
 const ui = () => useUI.getState();
 
@@ -129,13 +129,11 @@ function zoomTo(board: Board, id: string) {
 }
 
 const rowClass = (selected: boolean) =>
-  `group flex h-8 items-center gap-1.5 rounded-md pr-1 text-sm ${
-    selected
-      ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-500/20 dark:text-indigo-200'
-      : 'hover:bg-gray-100 dark:hover:bg-zinc-800'
+  `group flex h-7 items-center gap-1 rounded-md pr-0.5 text-[13px] ${
+    selected ? 'bg-selected text-on-selected' : 'hover:bg-hover'
   }`;
 
-const rowAction = 'rounded p-1 text-gray-500 hover:bg-black/5 dark:text-zinc-400 dark:hover:bg-white/10';
+const rowAction = 'rounded p-1 text-muted hover:bg-black/5 hover:text-fg dark:hover:bg-white/10';
 
 interface ObjectRowProps {
   id: string;
@@ -160,7 +158,7 @@ const ObjectRow = memo(function ObjectRow({
   return (
     <li
       className={rowClass(selected)}
-      style={{ paddingLeft: nested ? 28 : 8 }}
+      style={{ paddingLeft: nested ? 26 : 6 }}
       data-layer={id}
       data-testid="layer-row"
       onMouseEnter={() => ui().setLayerHover([id])}
@@ -169,11 +167,11 @@ const ObjectRow = memo(function ObjectRow({
       <button
         type="button"
         className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left"
-        title="Click to select, double-click to zoom to it"
+        data-tip="Click to select, double-click to zoom to it"
         onClick={(e) => selectRows([id], e.shiftKey || e.ctrlKey || e.metaKey)}
         onDoubleClick={() => zoomTo(board, id)}
       >
-        <Icon size={15} className="shrink-0 text-gray-500 dark:text-zinc-400" />
+        <Icon size={14} className="shrink-0 opacity-70" />
         <span className="truncate">{name}</span>
       </button>
       {!readOnly && (
@@ -214,7 +212,7 @@ function GroupName({ groupId, fallback, ids }: { groupId: string; fallback: stri
           if (e.key === 'Enter') commit(e.currentTarget.value);
           if (e.key === 'Escape') setEditing(false);
         }}
-        className="mr-1 min-w-0 flex-1 rounded border border-indigo-400 px-1 text-sm outline-none dark:bg-zinc-800"
+        className="field mr-1 h-6! min-w-0 flex-1 px-1! text-[13px]!"
         data-testid="group-name-input"
       />
     );
@@ -222,12 +220,12 @@ function GroupName({ groupId, fallback, ids }: { groupId: string; fallback: stri
   return (
     <button
       type="button"
-      className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left font-medium"
-      title={readOnly ? name : 'Click to select, double-click to rename'}
+      className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left font-semibold"
+      data-tip={readOnly ? name : 'Click to select, double-click to rename'}
       onClick={(e) => selectRows(ids, e.shiftKey || e.ctrlKey || e.metaKey)}
       onDoubleClick={() => !readOnly && setEditing(true)}
     >
-      <GroupIcon size={15} className="shrink-0 text-gray-500 dark:text-zinc-400" />
+      <GroupIcon size={14} className="shrink-0 opacity-70" />
       <span className="truncate">{name}</span>
     </button>
   );
@@ -281,7 +279,7 @@ function GroupRows({
             <button
               type="button"
               aria-label="Ungroup"
-              title="Ungroup"
+              data-tip="Ungroup"
               onClick={() => ungroup(board, ids)}
               className={`${rowAction} opacity-0 group-hover:opacity-100 focus:opacity-100`}
             >
@@ -346,45 +344,35 @@ export function LayersPanel() {
       <button
         type="button"
         onClick={toggle}
-        title="Layers"
         aria-label="Open layers"
-        className="absolute top-1/2 right-0 z-10 hidden -translate-y-1/2 flex-col items-center gap-1.5 rounded-l-xl bg-white py-3 pr-1.5 pl-2 text-xs font-medium text-gray-700 shadow-[0_1px_8px_rgba(5,0,56,0.14)] hover:text-indigo-600 sm:flex dark:bg-zinc-900 dark:text-zinc-300 dark:shadow-[0_1px_8px_rgba(0,0,0,0.5)] dark:ring-1 dark:ring-white/10 dark:hover:text-indigo-400"
+        className="absolute top-1/2 right-0 z-10 hidden -translate-y-1/2 flex-col items-center gap-1.5 rounded-l-[10px] border border-r-0 border-line bg-surface py-3 pr-1.5 pl-2 text-xs font-semibold text-muted shadow-panel transition-colors duration-100 hover:text-fg sm:flex"
         data-testid="layers-tab"
       >
-        <LayersIcon size={16} />
+        <LayersIcon size={15} />
         <span style={{ writingMode: 'vertical-rl' }}>Layers</span>
       </button>
     );
   }
 
   return (
-    <aside
-      className={`${panel} absolute top-[72px] right-3 bottom-16 z-20 flex w-64 max-w-[calc(100%-1.5rem)] flex-col`}
-      data-testid="layers-panel"
+    <SidePanel
+      title="Layers"
+      icon={<LayersIcon size={15} />}
+      width="w-64"
+      closeLabel="Collapse layers"
+      closeIcon={<PanelRightClose size={16} />}
+      closeTestId="layers-collapse"
+      onClose={toggle}
+      testId="layers-panel"
     >
-      <div className="flex items-center gap-2 border-b border-gray-200 px-3 py-2.5 dark:border-zinc-700">
-        <LayersIcon size={16} />
-        <h2 className="text-sm font-semibold">Layers</h2>
-        <button
-          type="button"
-          aria-label="Collapse layers"
-          title="Collapse"
-          onClick={toggle}
-          className="ml-auto rounded p-0.5 hover:bg-gray-100 dark:hover:bg-zinc-800"
-          data-testid="layers-collapse"
-        >
-          <PanelRightClose size={16} />
-        </button>
-      </div>
       <ul
         ref={list}
-        className="flex-1 overflow-y-auto p-1.5"
+        className="flex-1 overflow-y-auto p-1"
         onMouseLeave={() => ui().setLayerHover([])}
         data-testid="layer-list"
       >
         {nodes.length === 0 && (
-          <li className="flex flex-col items-center gap-2 p-6 text-center text-sm text-gray-500 dark:text-zinc-400">
-            <FileText size={20} />
+          <li className="p-5 text-center text-[13px] text-muted">
             Everything you add to the board is listed here.
           </li>
         )}
@@ -405,6 +393,6 @@ export function LayersPanel() {
           ),
         )}
       </ul>
-    </aside>
+    </SidePanel>
   );
 }

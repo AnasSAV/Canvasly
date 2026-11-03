@@ -105,10 +105,10 @@ function drawObject(ctx: CanvasRenderingContext2D, o: BoardObject, store: DocSto
         ctx.fillStyle = o.fill;
         ctx.fillRect(0, 0, o.w, o.h);
       }
-      ctx.strokeStyle = '#d4d4d8';
+      ctx.strokeStyle = '#b4c4c1';
       ctx.lineWidth = 1;
       ctx.strokeRect(0, 0, o.w, o.h);
-      ctx.fillStyle = '#52525b';
+      ctx.fillStyle = '#486362';
       ctx.font = `500 ${Math.max(14, o.w / 40)}px ${FONT_FAMILY}`;
       ctx.textBaseline = 'bottom';
       ctx.textAlign = 'left';

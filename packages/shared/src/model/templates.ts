@@ -290,7 +290,7 @@ function journey(b: Builder) {
   ];
   const cw = 260;
   const left = 190;
-  stages.forEach((st, i) => b.shape('arrowblock', st, left + i * cw, -50, cw - 10, 60, '#e8ecff', '#4262ff'));
+  stages.forEach((st, i) => b.shape('arrowblock', st, left + i * cw, -50, cw - 10, 60, '#d9ecea', '#0e7c7b'));
   rows.forEach(([row, color], r) => {
     const y = 40 + r * 230;
     b.shape('rect', row, 0, y, left - 20, 200, '#f1f3f5', '#ced4da');
@@ -317,7 +317,7 @@ function businessModel(b: Builder) {
 }
 
 function brainstorm(b: Builder) {
-  const prompt = b.shape('cloud', 'What should we try next?', -220, -110, 440, 220, '#e8ecff', '#4262ff');
+  const prompt = b.shape('cloud', 'What should we try next?', -220, -110, 440, 220, '#d9ecea', '#0e7c7b');
   const clusters: [number, number, string, string[]][] = [
     [-760, -330, YELLOW, ['Idea', 'Idea']],
     [340, -330, BLUE, ['Idea', 'Idea']],
@@ -349,8 +349,8 @@ function weekly(b: Builder) {
 
 function orgchart(b: Builder) {
   const node = (t: string, x: number, y: number, fill: string) =>
-    b.shape('roundrect', t, x, y, 220, 90, fill, '#4262ff');
-  const lead = node('Team lead', 0, 0, '#e8ecff');
+    b.shape('roundrect', t, x, y, 220, 90, fill, '#0e7c7b');
+  const lead = node('Team lead', 0, 0, '#d9ecea');
   const heads = [-480, 0, 480].map((x, i) =>
     node(['Design', 'Engineering', 'Product'][i]!, x, 180, '#ffffff'),
   );
@@ -376,7 +376,7 @@ function okr(b: Builder) {
   b.text('Objectives and key results', 0, -110, 40);
   [0, 1, 2].forEach((i) => {
     const y = i * 280;
-    const objective = b.shape('roundrect', `Objective ${i + 1}`, 0, y + 45, 300, 130, '#e8ecff', '#4262ff');
+    const objective = b.shape('roundrect', `Objective ${i + 1}`, 0, y + 45, 300, 130, '#d9ecea', '#0e7c7b');
     [0, 1, 2].forEach((k) => {
       const kr = b.sticky(`Key result ${k + 1}`, 420 + k * 220, y, k === 0 ? GREEN : k === 1 ? YELLOW : BLUE);
       if (k === 0) b.connect(objective, kr);

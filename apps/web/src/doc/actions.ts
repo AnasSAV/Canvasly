@@ -14,6 +14,7 @@ import {
   type Vec,
 } from '@canvasly/shared';
 import { textBox } from '../canvas/text';
+import { toast } from '../state/feedback';
 import { useUI } from '../state/ui';
 import { useViewport } from '../state/viewport';
 import { compressImage, uploadAsset } from './assets';
@@ -224,7 +225,7 @@ export function createActions(board: Board, getPointerWorld: () => Vec | null) {
           unreadable === 1 && "1 other element couldn't be read, and is a gray box too.",
           unreadable > 1 && `${unreadable} other elements couldn't be read, and are gray boxes too.`,
         ].filter(Boolean);
-        if (notes.length) alert(notes.join(' '));
+        if (notes.length) toast(notes.join(' '));
         return;
       }
       if (html.trim() && !own) {
@@ -235,7 +236,7 @@ export function createActions(board: Board, getPointerWorld: () => Vec | null) {
           const { objects, failed } = await toObjects(board.id, items);
           if (objects.length) actions.insertRich(objects, target);
           if (failed) {
-            alert(
+            toast(
               failed === 1
                 ? "1 image couldn't be copied: the site it's on doesn't allow it."
                 : `${failed} images couldn't be copied: the site they're on doesn't allow it.`,
@@ -276,7 +277,7 @@ export function createActions(board: Board, getPointerWorld: () => Vec | null) {
     insertFiles: async (files: File[], at?: Vec) => {
       if (!editable()) return;
       const refused = files.filter((f) => !isAddable(f)).map((f) => f.name);
-      if (refused.length) alert(`Only images and PDFs can be added. Skipped: ${refused.join(', ')}`);
+      if (refused.length) toast(`Only images and PDFs can be added. Skipped: ${refused.join(', ')}`);
       await actions.insertImages(
         files.filter((f) => f.type.startsWith('image/')),
         at,
@@ -303,10 +304,10 @@ export function createActions(board: Board, getPointerWorld: () => Vec | null) {
         ui().select([doc.id]);
         ui().setTool('select');
         if (omitted) {
-          alert(`Added the first ${MAX_PDF_PAGES} pages of ${name}. The other ${omitted} were left out.`);
+          toast(`Added the first ${MAX_PDF_PAGES} pages of ${name}. The other ${omitted} were left out.`);
         }
       } catch (err) {
-        if (!(err instanceof PdfCancelled)) alert(`Couldn't add ${name}: ${(err as Error).message}`);
+        if (!(err instanceof PdfCancelled)) toast(`Couldn't add ${name}: ${(err as Error).message}`, 'error');
       } finally {
         ui().setImportProgress(null);
       }
@@ -329,7 +330,7 @@ export function createActions(board: Board, getPointerWorld: () => Vec | null) {
           created.push(img.id);
           pos = { x: pos.x + 40, y: pos.y + 40 };
         } catch (err) {
-          alert(`Couldn't add ${file.name}: ${(err as Error).message}`);
+          toast(`Couldn't add ${file.name}: ${(err as Error).message}`, 'error');
         }
       }
       if (created.length) {

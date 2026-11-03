@@ -21,7 +21,7 @@ import { traceShape } from './shapePaths';
 import { MAX_FONT_SIZE, textBox } from './text';
 import { ConnectorNode } from './shapes';
 
-const ACCENT = '#4262ff';
+const ACCENT = '#ed5b0f';
 /** Strip float noise from transform results to keep documents small and diffs clean. */
 const round = (v: number) => Math.round(v * 100) / 100;
 /** Kept small so the floating selection toolbar can sit above the rotate handle. */
@@ -168,7 +168,7 @@ function SelectionTransformer({ stage }: { stage: Konva.Stage | null }) {
       rotationSnapTolerance={4}
       ignoreStroke
       flipEnabled={false}
-      borderStroke={anyLocked ? '#9ca3af' : ACCENT}
+      borderStroke={anyLocked ? '#86a09f' : ACCENT}
       borderDash={anyLocked ? [4, 4] : undefined}
       anchorStroke={ACCENT}
       anchorFill="#fff"
@@ -419,7 +419,7 @@ function Draft({ zoom }: { zoom: number }) {
           x={draft.x}
           y={draft.y}
           radius={draft.r}
-          stroke="#6b7280"
+          stroke="#567271"
           strokeWidth={1 / zoom}
           fill="rgba(255,255,255,0.4)"
           listening={false}
@@ -516,7 +516,7 @@ export function OverlayLayer({ stage }: { stage: Konva.Stage | null }) {
         <Line
           key={i}
           points={g.orientation === 'v' ? [g.pos, g.from, g.pos, g.to] : [g.from, g.pos, g.to, g.pos]}
-          stroke="#e8318a"
+          stroke="#14a89d"
           strokeWidth={1 / zoom}
           listening={false}
         />

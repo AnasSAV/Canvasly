@@ -89,11 +89,12 @@ import {
   updateEach,
   type ConvertTarget,
 } from '../doc/ops';
+import { toast } from '../state/feedback';
 import { usePrefs } from '../state/prefs';
 import { useUI } from '../state/ui';
 import { useViewport } from '../state/viewport';
 import { objectContextEntries } from './boardMenus';
-import { CustomColor } from './CustomColor';
+import { CustomColor, isFloatingPanel } from './CustomColor';
 import { IconButton, Swatch, panel } from './IconButton';
 import { MenuList } from './Menu';
 
@@ -172,23 +173,35 @@ function ColorPicker({
   return (
     <div className="relative">
       {icon ? (
-        <IconButton label={label} active={isOpen} onClick={toggle}>
+        <IconButton label={label} aria-expanded={isOpen} onClick={toggle}>
           {icon}
         </IconButton>
       ) : (
-        <div
-          title={label}
-          className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800"
+        <button
+          type="button"
+          aria-label={label}
+          aria-expanded={isOpen}
+          data-tip={label}
+          onClick={toggle}
+          className="tile"
         >
-          <Swatch color={value ?? '#ffffff'} onClick={toggle} />
-        </div>
+          <span
+            className="swatch h-5! w-5! hover:scale-100!"
+            style={{
+              background:
+                value === 'transparent'
+                  ? 'linear-gradient(135deg, #fff 44%, #d9391f 44%, #d9391f 56%, #fff 56%)'
+                  : (value ?? '#ffffff'),
+            }}
+          />
+        </button>
       )}
       {isOpen && (
-        <Dropdown className={`${panel} left-1/2 grid w-max -translate-x-1/2 grid-cols-6 gap-1.5 p-2`}>
+        <Dropdown className={`${panel} pop left-1/2 grid w-max -translate-x-1/2 grid-cols-6 gap-1.5 p-2`}>
           {colors.map((c) => (
             <Swatch key={c} color={c} active={c === value} onClick={() => pick(c)} />
           ))}
-          <CustomColor value={value} onPick={pick} />
+          <CustomColor value={value} onPick={onPick} />
         </Dropdown>
       )}
     </div>
@@ -201,7 +214,7 @@ function ColorIcon({ color, children }: { color: string | undefined; children: R
     <span className="flex flex-col items-center gap-0.5">
       {children}
       <span
-        className="h-[3px] w-5 rounded-full border border-black/10 dark:border-white/40"
+        className="h-[3px] w-5 rounded-full border border-(--swatch-edge)"
         style={{ background: color === 'transparent' ? 'transparent' : color }}
       />
     </span>
@@ -214,10 +227,10 @@ function FontPicker({ value, onPick }: { value: FontId; onPick: (font: FontId) =
     <div className="relative">
       <button
         type="button"
-        title="Font"
+        data-tip="Font"
         aria-expanded={isOpen}
         onClick={toggle}
-        className="flex h-10 items-center gap-1 rounded-lg px-2 text-sm whitespace-nowrap hover:bg-gray-100 dark:hover:bg-zinc-800"
+        className="flex h-9 items-center gap-1 rounded-[7px] px-2 text-[13px] whitespace-nowrap hover:bg-hover"
         data-testid="font-picker"
       >
         <span className="w-24 truncate text-left" style={{ fontFamily: FONTS[value].family }}>
@@ -226,7 +239,7 @@ function FontPicker({ value, onPick }: { value: FontId; onPick: (font: FontId) =
         <ChevronDown size={14} className="shrink-0" />
       </button>
       {isOpen && (
-        <Dropdown className={`${panel} left-0 max-h-80 w-56 overflow-y-auto p-1`}>
+        <Dropdown className={`${panel} pop left-0 max-h-80 w-56 overflow-y-auto p-1`}>
           <div role="listbox" aria-label="Font">
             {FONT_MENU.map((id) => (
               <button
@@ -238,8 +251,8 @@ function FontPicker({ value, onPick }: { value: FontId; onPick: (font: FontId) =
                   onPick(id);
                   close();
                 }}
-                className={`block w-full rounded-md px-2.5 py-1.5 text-left text-[15px] whitespace-nowrap hover:bg-gray-100 dark:hover:bg-zinc-800 ${
-                  id === value ? 'text-indigo-600 dark:text-indigo-400' : ''
+                className={`block w-full rounded-md px-2 py-1.5 text-left text-[15px] whitespace-nowrap hover:bg-hover ${
+                  id === value ? 'text-link' : ''
                 }`}
                 style={{ fontFamily: FONTS[id].family }}
                 data-testid={`font-${id}`}
@@ -256,7 +269,7 @@ function FontPicker({ value, onPick }: { value: FontId; onPick: (font: FontId) =
 
 function FontSizeControl({ value, onChange }: { value: number; onChange: (size: number) => void }) {
   const size = Math.round(value);
-  const stepper = 'flex h-4 w-5 items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-zinc-800';
+  const stepper = 'flex h-4 w-5 items-center justify-center rounded hover:bg-hover';
   return (
     <div className="flex items-center">
       <input
@@ -274,14 +287,14 @@ function FontSizeControl({ value, onChange }: { value: number; onChange: (size: 
           if (next !== size) onChange(next);
           e.currentTarget.value = String(next);
         }}
-        className="h-8 w-9 rounded-md bg-transparent text-center text-sm tabular-nums outline-none hover:bg-gray-100 focus:bg-gray-100 dark:hover:bg-zinc-800 dark:focus:bg-zinc-800"
+        className="num h-8 w-9 rounded-md bg-transparent text-center text-xs outline-none hover:bg-hover focus:bg-hover"
         data-testid="font-size"
       />
       <div className="flex flex-col">
         <button
           type="button"
           aria-label="Bigger text"
-          title={`Bigger text (${MOD} Shift >)`}
+          data-tip={`Bigger text (${MOD} Shift >)`}
           className={stepper}
           onClick={() => onChange(stepFontSize(size, 1))}
         >
@@ -290,7 +303,7 @@ function FontSizeControl({ value, onChange }: { value: number; onChange: (size: 
         <button
           type="button"
           aria-label="Smaller text"
-          title={`Smaller text (${MOD} Shift <)`}
+          data-tip={`Smaller text (${MOD} Shift <)`}
           className={stepper}
           onClick={() => onChange(stepFontSize(size, -1))}
         >
@@ -324,7 +337,7 @@ function ToggleMenu({
         {icon}
       </IconButton>
       {isOpen && (
-        <Dropdown className={`${panel} left-1/2 flex w-max -translate-x-1/2 gap-0.5 p-1`}>
+        <Dropdown className={`${panel} pop left-1/2 flex w-max -translate-x-1/2 gap-px p-1`}>
           {children}
         </Dropdown>
       )}
@@ -372,27 +385,21 @@ function LinkForm({
             setInvalid(false);
           }}
           onKeyDown={(e) => e.stopPropagation()}
-          className="min-w-0 flex-1 rounded-md border border-gray-300 px-2 py-1 text-sm outline-none focus:border-indigo-500 dark:border-zinc-600 dark:bg-zinc-800"
+          className="field field-sm flex-1"
           data-testid="link-input"
         />
-        <button
-          type="submit"
-          className="rounded-md bg-indigo-600 px-2.5 py-1 text-sm font-medium text-white hover:bg-indigo-700"
-          data-testid="link-apply"
-        >
+        <button type="submit" className="btn btn-sm btn-primary h-[1.875rem]!" data-testid="link-apply">
           Apply
         </button>
       </div>
-      {invalid && (
-        <p className="text-xs text-red-600 dark:text-red-400">Links must be http, https or mailto.</p>
-      )}
+      {invalid && <p className="text-xs text-danger">Links must be http, https or mailto.</p>}
       {value && (
         <div className="flex items-center justify-between text-xs">
           <a
             href={value}
             target="_blank"
             rel="noopener noreferrer"
-            className="font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+            className="text-link"
             data-testid="link-open"
           >
             Open link
@@ -403,14 +410,14 @@ function LinkForm({
               onSet(null);
               close();
             }}
-            className="text-gray-500 hover:text-red-600 dark:text-zinc-400"
+            className="text-muted hover:text-danger"
             data-testid="link-remove"
           >
             Remove
           </button>
         </div>
       )}
-      <p className="text-xs text-gray-500 dark:text-zinc-400">Ctrl or ⌘ + click the object to follow it.</p>
+      <p className="text-xs text-muted">Ctrl or ⌘ + click the object to follow it.</p>
     </form>
   );
 }
@@ -423,7 +430,7 @@ function LinkMenu({ value, onSet }: { value: string | null; onSet: (link: string
         <Link2 size={18} />
       </IconButton>
       {isOpen && (
-        <Dropdown className={`${panel} left-1/2 w-72 -translate-x-1/2 p-2.5`}>
+        <Dropdown className={`${panel} pop left-1/2 w-72 -translate-x-1/2 p-2.5`}>
           <LinkForm value={value} onSet={onSet} close={close} />
         </Dropdown>
       )}
@@ -504,7 +511,7 @@ function CornerMenu({ shapes, ids }: { shapes: ShapeObject[]; ids: string[] }) {
         <SquareRoundCorner size={18} />
       </IconButton>
       {isOpen && (
-        <Dropdown className={`${panel} left-1/2 w-52 -translate-x-1/2 p-2.5`}>
+        <Dropdown className={`${panel} pop left-1/2 w-52 -translate-x-1/2 p-2.5`}>
           <div className="mb-2.5 grid grid-cols-4 gap-1">
             {CORNER_PRESETS.map(({ label, fraction }) => {
               const preset = Math.round(max * fraction);
@@ -515,9 +522,7 @@ function CornerMenu({ shapes, ids }: { shapes: ShapeObject[]; ids: string[] }) {
                   aria-pressed={value === preset}
                   onClick={() => set(preset)}
                   className={`rounded-md py-1 text-[11px] font-medium ${
-                    value === preset
-                      ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300'
-                      : 'hover:bg-gray-100 dark:hover:bg-zinc-800'
+                    value === preset ? 'bg-selected text-on-selected' : 'hover:bg-hover'
                   }`}
                   data-testid={`corner-${label.toLowerCase()}`}
                 >
@@ -526,7 +531,7 @@ function CornerMenu({ shapes, ids }: { shapes: ShapeObject[]; ids: string[] }) {
               );
             })}
           </div>
-          <label className="text-xs font-medium text-gray-500 dark:text-zinc-400">
+          <label className="text-xs font-semibold text-muted">
             Radius: {value}
             <input
               type="range"
@@ -536,7 +541,7 @@ function CornerMenu({ shapes, ids }: { shapes: ShapeObject[]; ids: string[] }) {
               onPointerDown={() => board.beginGesture()}
               onPointerUp={() => board.endGesture()}
               onChange={(e) => set(Number(e.target.value), false)}
-              className="mt-1 block w-full accent-indigo-600"
+              className="slider mt-1.5"
               data-testid="corner-radius-input"
             />
           </label>
@@ -607,18 +612,18 @@ function CapMenu({
     <div className="relative">
       <button
         type="button"
-        title={which === 'start' ? 'Start of line' : 'End of line'}
+        data-tip={which === 'start' ? 'Start of line' : 'End of line'}
         aria-expanded={isOpen}
         onClick={toggle}
-        className={`flex h-10 min-w-10 items-center justify-center rounded-lg px-1.5 text-sm hover:bg-gray-100 dark:hover:bg-zinc-800 ${
-          isOpen ? 'bg-indigo-100 dark:bg-indigo-500/20' : ''
+        className={`flex h-9 min-w-9 items-center justify-center rounded-[7px] px-1.5 text-xs hover:bg-hover ${
+          isOpen ? 'bg-selected text-on-selected' : ''
         }`}
         data-testid={`line-${which}-cap`}
       >
         {value === 'none' ? 'None' : <CapGlyph cap={value} flip={flip} />}
       </button>
       {isOpen && (
-        <Dropdown className={`${panel} left-1/2 flex w-40 -translate-x-1/2 flex-col p-1`}>
+        <Dropdown className={`${panel} pop left-1/2 flex w-40 -translate-x-1/2 flex-col p-1`}>
           {LINE_CAPS.map((cap) => (
             <button
               key={cap}
@@ -627,8 +632,8 @@ function CapMenu({
                 onPick(cap);
                 close();
               }}
-              className={`flex items-center justify-between rounded-md px-2 py-1.5 text-sm whitespace-nowrap hover:bg-gray-100 dark:hover:bg-zinc-800 ${
-                cap === value ? 'text-indigo-600 dark:text-indigo-400' : ''
+              className={`flex items-center justify-between rounded-md px-2 py-1.5 text-[13px] whitespace-nowrap hover:bg-hover ${
+                cap === value ? 'text-link' : ''
               }`}
               data-testid={`cap-${cap}`}
             >
@@ -671,20 +676,18 @@ function LineStyleMenu({
         </svg>
       </IconButton>
       {isOpen && (
-        <Dropdown className={`${panel} left-1/2 w-44 -translate-x-1/2 p-2.5`}>
+        <Dropdown className={`${panel} pop left-1/2 w-44 -translate-x-1/2 p-2.5`}>
           <div className="mb-2.5 flex gap-1">
             {LINE_DASHES.map((d) => (
               <button
                 key={d}
                 type="button"
-                title={d[0]!.toUpperCase() + d.slice(1)}
+                data-tip={d[0]!.toUpperCase() + d.slice(1)}
                 aria-label={d}
                 aria-pressed={d === dash}
                 onClick={() => onDash(d)}
                 className={`flex h-8 flex-1 items-center justify-center rounded-md ${
-                  d === dash
-                    ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300'
-                    : 'hover:bg-gray-100 dark:hover:bg-zinc-800'
+                  d === dash ? 'bg-selected text-on-selected' : 'hover:bg-hover'
                 }`}
                 data-testid={`dash-${d}`}
               >
@@ -705,7 +708,7 @@ function LineStyleMenu({
               </button>
             ))}
           </div>
-          <label className="text-xs font-medium text-gray-500 dark:text-zinc-400">
+          <label className="text-xs font-semibold text-muted">
             Thickness: {width}
             <input
               type="range"
@@ -715,7 +718,7 @@ function LineStyleMenu({
               // Dragging the slider is one change, applied when it's let go.
               onPointerUp={(e) => onWidth(Number(e.currentTarget.value))}
               onKeyUp={(e) => onWidth(Number(e.currentTarget.value))}
-              className="mt-1 block w-full accent-indigo-600"
+              className="slider mt-1.5"
               data-testid="line-width"
             />
           </label>
@@ -759,17 +762,15 @@ function ExtractMenu({ o, shown }: { o: DocumentObject; shown: number }) {
   };
 
   const row =
-    'flex w-full items-center justify-between gap-3 rounded-md px-2.5 py-1.5 text-left text-sm whitespace-nowrap hover:bg-gray-100 dark:hover:bg-zinc-800';
+    'flex w-full items-center justify-between gap-3 rounded-md px-2.5 py-1.5 text-left text-sm whitespace-nowrap hover:bg-hover';
   return (
     <div className="relative">
       <IconButton label="Extract pages" active={isOpen} onClick={toggle} data-testid="doc-extract">
         <FileOutput size={18} />
       </IconButton>
       {isOpen && (
-        <Dropdown className={`${panel} left-1/2 w-64 -translate-x-1/2 p-1.5`}>
-          <p className="px-2.5 pt-1 pb-1.5 text-xs font-semibold text-gray-500 dark:text-zinc-400">
-            Extract as separate pages
-          </p>
+        <Dropdown className={`${panel} pop left-1/2 w-64 -translate-x-1/2 p-1.5`}>
+          <p className="px-2.5 pt-1 pb-1.5 text-xs font-semibold text-muted">Extract as separate pages</p>
           <button
             type="button"
             className={row}
@@ -777,7 +778,7 @@ function ExtractMenu({ o, shown }: { o: DocumentObject; shown: number }) {
             data-testid="extract-current"
           >
             This page
-            <span className="text-xs text-gray-500 dark:text-zinc-400">Page {shown + 1}</span>
+            <span className="text-xs text-muted">Page {shown + 1}</span>
           </button>
           <button
             type="button"
@@ -786,11 +787,11 @@ function ExtractMenu({ o, shown }: { o: DocumentObject; shown: number }) {
             data-testid="extract-all"
           >
             Entire document
-            <span className="text-xs text-gray-500 dark:text-zinc-400">
+            <span className="text-xs text-muted">
               {total} {total === 1 ? 'page' : 'pages'}
             </span>
           </button>
-          <div className="my-1.5 h-px bg-gray-200 dark:bg-zinc-700" />
+          <div className="my-1.5 h-px bg-line" />
           <form onSubmit={submit} className="px-2.5 pb-1.5">
             <label className="text-sm" htmlFor="extract-range">
               Custom range
@@ -806,22 +807,19 @@ function ExtractMenu({ o, shown }: { o: DocumentObject; shown: number }) {
                   setError(null);
                 }}
                 onKeyDown={(e) => e.stopPropagation()}
-                className="min-w-0 flex-1 rounded-md border border-gray-300 px-2 py-1 text-sm outline-none focus:border-indigo-500 dark:border-zinc-600 dark:bg-zinc-800"
+                className="field field-sm flex-1"
                 data-testid="extract-range"
               />
               <button
                 type="submit"
-                className="rounded-md bg-indigo-600 px-2.5 py-1 text-sm font-medium text-white hover:bg-indigo-700"
+                className="btn btn-sm btn-primary h-[1.875rem]!"
                 data-testid="extract-apply"
               >
                 Extract
               </button>
             </div>
             {error && (
-              <p
-                className="mt-1.5 text-xs whitespace-normal text-red-600 dark:text-red-400"
-                data-testid="extract-error"
-              >
+              <p className="mt-1.5 text-xs whitespace-normal text-danger" data-testid="extract-error">
                 {error}
               </p>
             )}
@@ -845,7 +843,11 @@ function DocumentControls({ o }: { o: DocumentObject }) {
   };
   return (
     <>
-      <span className="max-w-36 truncate px-2 text-sm font-medium" title={o.title} data-testid="doc-title">
+      <span
+        className="max-w-36 truncate px-2 text-[13px] font-semibold"
+        data-tip={o.title}
+        data-testid="doc-title"
+      >
         {o.title}
       </span>
       <IconButton
@@ -871,13 +873,10 @@ function DocumentControls({ o }: { o: DocumentObject }) {
           if (target !== shown) go(target);
           e.currentTarget.value = String(target + 1);
         }}
-        className="h-8 w-9 rounded-md bg-transparent text-center text-sm font-medium tabular-nums outline-none hover:bg-gray-100 focus:bg-gray-100 dark:hover:bg-zinc-800 dark:focus:bg-zinc-800"
+        className="num h-8 w-9 rounded-md bg-transparent text-center text-xs outline-none hover:bg-hover focus:bg-hover"
         data-testid="doc-page"
       />
-      <span
-        className="pr-1 text-sm whitespace-nowrap text-gray-500 dark:text-zinc-400"
-        data-testid="doc-count"
-      >
+      <span className="pr-1 text-xs whitespace-nowrap text-muted" data-testid="doc-count">
         of {o.pages.length}
       </span>
       <IconButton
@@ -892,7 +891,7 @@ function DocumentControls({ o }: { o: DocumentObject }) {
       {!readOnly && <ExtractMenu o={o} shown={shown} />}
       <IconButton
         label="Download as PDF"
-        onClick={() => void exportDocumentPdf(board, o).catch((e: Error) => alert(e.message))}
+        onClick={() => void exportDocumentPdf(board, o).catch((e: Error) => toast(e.message, 'error'))}
         data-testid="doc-download"
       >
         <Download size={18} />
@@ -901,7 +900,7 @@ function DocumentControls({ o }: { o: DocumentObject }) {
   );
 }
 
-const Divider = () => <div className="mx-0.5 h-6 w-px bg-gray-200 dark:bg-zinc-700" />;
+const Divider = () => <div className="mx-0.5 h-6 w-px bg-line" />;
 
 /** Style controls that apply to every selected object of the relevant type. */
 function StyleControls({ objs, ids }: { objs: BoardObject[]; ids: string[] }) {
@@ -1138,7 +1137,7 @@ function StyleControls({ objs, ids }: { objs: BoardObject[]; ids: string[] }) {
           const name = e.currentTarget.value.trim();
           if (name && name !== first.name) updateEach(board, ids, () => ({ name }));
         }}
-        className="mx-1 w-36 rounded-md border border-gray-300 px-2 py-1 text-sm outline-none focus:border-indigo-500 dark:border-zinc-600 dark:bg-zinc-800"
+        className="field field-sm mx-1 w-36!"
       />,
       <ColorPicker
         key="frame-fill"
@@ -1196,9 +1195,9 @@ function StyleControls({ objs, ids }: { objs: BoardObject[]; ids: string[] }) {
         key="header"
         type="button"
         aria-pressed={first.headerRow}
-        title="Header row"
+        data-tip="Header row"
         onClick={() => updateEach(board, ids, () => ({ headerRow: !first.headerRow }))}
-        className={`h-10 rounded-lg px-2 text-xs font-medium ${first.headerRow ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300' : 'hover:bg-gray-100 dark:hover:bg-zinc-800'}`}
+        className={`h-9 rounded-[7px] px-2 text-xs font-semibold ${first.headerRow ? 'bg-selected text-on-selected' : 'hover:bg-hover'}`}
       >
         Header
       </button>,
@@ -1210,7 +1209,7 @@ function StyleControls({ objs, ids }: { objs: BoardObject[]; ids: string[] }) {
         key="edit-chart"
         type="button"
         onClick={() => useUI.getState().setChartEditor(first.id)}
-        className="flex h-10 items-center gap-1.5 rounded-lg px-2 text-xs font-medium hover:bg-gray-100 dark:hover:bg-zinc-800"
+        className="flex h-9 items-center gap-1.5 rounded-[7px] px-2 text-xs font-semibold hover:bg-hover"
         data-testid="chart-edit"
       >
         <ChartColumn size={16} /> Edit data
@@ -1315,7 +1314,7 @@ export function ObjectSizeTag() {
   const pos = live ?? at;
   return (
     <div
-      className="pointer-events-none absolute z-10 -translate-x-1/2 rounded bg-indigo-600 px-1.5 py-0.5 text-[11px] font-medium text-white tabular-nums"
+      className="pointer-events-none absolute z-10 -translate-x-1/2 num rounded bg-teal px-1.5 py-0.5 text-[11px] text-on-teal"
       style={{ left: pos.x, top: pos.y + 10 }}
       data-testid="object-size"
     >
@@ -1356,7 +1355,7 @@ function ToolbarBody({
   // The canvas keeps focus where it is on pointer down, so inputs have to be told to commit.
   useEffect(() => {
     const onDown = (e: PointerEvent) => {
-      if (root.current?.contains(e.target as Node)) return;
+      if (root.current?.contains(e.target as Node) || isFloatingPanel(e.target)) return;
       setOpen(null);
       const active = document.activeElement;
       if (active instanceof HTMLElement && root.current?.contains(active)) active.blur();
@@ -1385,7 +1384,8 @@ function ToolbarBody({
     <OpenMenu.Provider value={{ open, setOpen }}>
       <div
         ref={root}
-        className={`${panel} absolute z-10 flex w-max max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-0.5 p-1`}
+        className={`${panel} plain-bar absolute z-10 flex w-max max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-px p-1`}
+        data-tip-side="top"
         style={{ left: x, top: y }}
         onPointerDown={(e) => e.stopPropagation()}
         data-testid="selection-toolbar"

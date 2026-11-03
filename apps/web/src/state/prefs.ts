@@ -43,6 +43,8 @@ interface PrefsState extends Prefs {
   toggle: (k: BooleanPref) => void;
 }
 
+const applyMotion = (reduce: boolean) => document.documentElement.classList.toggle('reduce-motion', reduce);
+
 export const usePrefs = create<PrefsState>()((set, get) => {
   const persist = () => {
     try {
@@ -52,14 +54,17 @@ export const usePrefs = create<PrefsState>()((set, get) => {
       // preferences just won't be remembered
     }
   };
+  const loaded = load();
+  applyMotion(loaded.reduceMotion);
   return {
-    ...load(),
+    ...loaded,
     setNavMode: (navMode) => {
       set({ navMode });
       persist();
     },
     toggle: (k) => {
       set({ [k]: !get()[k] });
+      if (k === 'reduceMotion') applyMotion(get().reduceMotion);
       persist();
     },
   };
